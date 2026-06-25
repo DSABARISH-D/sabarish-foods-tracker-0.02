@@ -1,0 +1,198 @@
+// ====================================
+// SABARISH FOODS — Tamil Translations (Default)
+// ====================================
+{
+  "app": {
+    "name": "சபரிஷ் உணவகம்",
+    "tagline": "KN பாளையம், தமிழ்நாடு"
+  },
+  "nav": {
+    "home": "முகப்பு",
+    "expenses": "செலவுகள்",
+    "kadan": "கடன்",
+    "reports": "அறிக்கைகள்",
+    "inventory": "சரக்கு",
+    "settings": "அமைப்புகள்"
+  },
+  "greeting": {
+    "morning": "காலை வணக்கம்!",
+    "afternoon": "மதிய வணக்கம்!",
+    "evening": "மாலை வணக்கம்!",
+    "night": "இரவு வணக்கம்!"
+  },
+  "dashboard": {
+    "title": "முகப்பு",
+    "petty_cash": "பெட்டி பணம்",
+    "cash_in_hand": "கையில் பணம்",
+    "cash_in_bank": "UPI PAY",
+    "daily_sales": "இன்றைய விற்பனை",
+    "daily_expenses": "இன்றைய செலவு",
+    "today_profit": "இன்றைய லாபம்",
+    "monthly_sales": "மாத விற்பனை",
+    "monthly_expenses": "மாத செலவு",
+    "monthly_profit": "மாத லாபம்",
+    "low_stock": "குறைந்த சரக்கு",
+    "pending_kadan": "நிலுவையில் கடன்",
+    "refresh": "புதுப்பிக்கவும்",
+    "last_updated": "கடைசியாக புதுப்பிக்கப்பட்டது"
+  },
+  "expenses": {
+    "title": "செலவுகள்",
+    "add_expense": "செலவு சேர்க்கவும்",
+    "today_total": "இன்றைய மொத்த செலவு",
+    "chicken_calculator": "கோழி கணக்கு",
+    "price_per_kg": "கிலோ விலை (₹)",
+    "quantity_kg": "அளவு (கிலோ)",
+    "total_cost": "மொத்த தொகை",
+    "amount": "தொகை (₹)",
+    "description": "விளக்கம்",
+    "date": "தேதி",
+    "save": "சேமிக்கவும்",
+    "lock_day": "இன்றைய நாளை பூட்டவும்",
+    "day_locked": "இன்றைய நாள் சேமிக்கப்பட்டு பூட்டப்பட்டது ✓",
+    "locked": "பூட்டப்பட்டது",
+    "delete": "நீக்கவும்",
+    "confirm_delete": "நீக்குவதை உறுதிப்படுத்தவும்",
+    "delete_message": "இந்த செலவை நீக்க விரும்புகிறீர்களா?",
+    "empty": "இன்று செலவுகள் இல்லை",
+    "categories": {
+      "chicken_cost": "கோழி கணக்கு",
+      "store_purchases": "கடை வாங்குதல்",
+      "market_purchases": "சந்தை வாங்குதல்",
+      "indian_market": "இந்திய சந்தை",
+      "electricity": "மின்சாரம்",
+      "gas_cylinder": "கேஸ் சிலிண்டர்",
+      "staff_salary": "ஊழியர் சம்பளம்",
+      "transport": "போக்குவரத்து",
+      "other": "மற்றவை"
+    }
+  },
+  "kadan": {
+    "title": "கடன் மேலாண்மை",
+    "add_kadan": "கடன் சேர்க்கவும்",
+    "customer_name": "வாடிக்கையாளர் பெயர்",
+    "mobile_number": "மொபைல் எண்",
+    "amount": "தொகை (₹)",
+    "due_date": "செலுத்த வேண்டிய தேதி",
+    "notes": "குறிப்புகள்",
+    "save": "சேமிக்கவும்",
+    "mark_paid": "செலுத்தப்பட்டது என குறிக்கவும்",
+    "whatsapp_reminder": "WhatsApp நினைவூட்டல்",
+    "search": "வாடிக்கையாளரை தேடுங்கள்",
+    "filter_all": "அனைத்தும்",
+    "filter_pending": "நிலுவையில்",
+    "filter_paid": "செலுத்தப்பட்டது",
+    "filter_overdue": "தாமதமான",
+    "total_pending": "மொத்த நிலுவை",
+    "empty": "கடன் பதிவுகள் இல்லை",
+    "confirm_delete": "இந்த கடனை நீக்க விரும்புகிறீர்களா?",
+    "status": {
+      "pending": "நிலுவையில்",
+      "paid": "செலுத்தப்பட்டது",
+      "overdue": "தாமதமான"
+    },
+    "whatsapp_message": "வணக்கம் {{name}}! சபரிஷ் உணவகம் இருந்து அறிவிக்கிறோம். உங்கள் கடன் தொகை ₹{{amount}} - {{due_date}} தேதிக்குள் செலுத்த வேண்டும். நன்றி! 🙏"
+  },
+  "inventory": {
+    "title": "சரக்கு",
+    "low_stock_alert": "சரக்கு குறைவு!",
+    "add_stock": "சரக்கு சேர்க்கவும்",
+    "current_stock": "தற்போதைய சரக்கு",
+    "threshold": "குறைந்தபட்ச அளவு",
+    "unit": "அலகு",
+    "update": "புதுப்பிக்கவும்",
+    "empty": "சரக்கு தரவு இல்லை",
+    "items": {
+      "chicken": "கோழி",
+      "oil": "எண்ணெய்",
+      "masala": "மசாலா",
+      "rice": "அரிசி",
+      "gas": "கேஸ்",
+      "other": "மற்றவை"
+    },
+    "status": {
+      "ok": "நல்லது",
+      "low": "குறைவாக உள்ளது",
+      "critical": "மிகவும் குறைவு"
+    }
+  },
+  "reports": {
+    "title": "அறிக்கைகள்",
+    "daily": "தினசரி",
+    "weekly": "வாராந்திர",
+    "monthly": "மாதாந்திர",
+    "total_sales": "மொத்த விற்பனை",
+    "total_expenses": "மொத்த செலவு",
+    "total_profit": "மொத்த லாபம்",
+    "sales_trend": "விற்பனை போக்கு",
+    "expense_trend": "செலவு போக்கு",
+    "profit_trend": "லாப போக்கு",
+    "expense_breakdown": "செலவு பிரிவு",
+    "export_pdf": "PDF ஏற்றுமதி",
+    "export_excel": "Excel ஏற்றுமதி",
+    "share_whatsapp": "WhatsApp பகிர்வு",
+    "empty": "அறிக்கை தரவு இல்லை",
+    "no_data": "இந்த காலகட்டத்தில் தரவு இல்லை"
+  },
+  "settings": {
+    "title": "அமைப்புகள்",
+    "language": "மொழி",
+    "language_tamil": "தமிழ் 🇮🇳",
+    "language_english": "ஆங்கிலம் 🇬🇧",
+    "theme": "தீம்",
+    "theme_light": "வெளிர் தீம்",
+    "theme_dark": "இருண்ட தீம்",
+    "google_sheets": "Google Sheets ஒத்திசைவு",
+    "last_sync": "கடைசி ஒத்திசைவு",
+    "pending_sync": "நிலுவையில் ஒத்திசைவு",
+    "manual_sync": "இப்போது ஒத்திசைவு செய்யவும்",
+    "sync_enabled": "ஒத்திசைவு இயக்கப்பட்டது",
+    "profile": "சுயவிவரம்",
+    "restaurant_name": "உணவகம் பெயர்",
+    "owner_name": "உரிமையாளர் பெயர்",
+    "logout": "வெளியேறு",
+    "confirm_logout": "வெளியேற உறுதிப்படுத்தவும்",
+    "logout_message": "வெளியேற விரும்புகிறீர்களா?"
+  },
+  "auth": {
+    "login": "உள்நுழைவு",
+    "email": "மின்னஞ்சல்",
+    "password": "கடவுச்சொல்",
+    "sign_in": "உள்நுழைக",
+    "signing_in": "உள்நுழைகிறது...",
+    "invalid_credentials": "தவறான மின்னஞ்சல் அல்லது கடவுச்சொல்",
+    "welcome": "வரவேற்கிறோம்",
+    "subtitle": "சபரிஷ் உணவகம் மேலாண்மை"
+  },
+  "common": {
+    "save": "சேமிக்கவும்",
+    "cancel": "ரத்து செய்யவும்",
+    "delete": "நீக்கவும்",
+    "edit": "திருத்தவும்",
+    "add": "சேர்க்கவும்",
+    "close": "மூடவும்",
+    "yes": "ஆம்",
+    "no": "இல்லை",
+    "ok": "சரி",
+    "loading": "ஏற்றுகிறது...",
+    "error": "பிழை",
+    "retry": "மீண்டும் முயற்சிக்கவும்",
+    "offline": "ஆஃப்லைன் — உள்ளூர் தரவு காட்டப்படுகிறது",
+    "offline_saved": "தரவு சேமிக்கப்பட்டது, இணைப்பு வந்தவுடன் ஒத்திசைக்கப்படும்",
+    "currency": "₹",
+    "kg": "கிலோ",
+    "litres": "லிட்டர்",
+    "cylinders": "சிலிண்டர்",
+    "today": "இன்று",
+    "yesterday": "நேற்று",
+    "all": "அனைத்தும்"
+  },
+  "errors": {
+    "network": "நெட்வொர்க் பிழை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.",
+    "unknown": "எதிர்பாராத பிழை ஏற்பட்டது.",
+    "required": "இந்த புலம் கட்டாயமாகும்",
+    "invalid_mobile": "சரியான 10 இலக்க மொபைல் எண் உள்ளிடவும்",
+    "invalid_amount": "சரியான தொகை உள்ளிடவும்",
+    "load_failed": "தரவு ஏற்றுவதில் தோல்வி"
+  }
+}
