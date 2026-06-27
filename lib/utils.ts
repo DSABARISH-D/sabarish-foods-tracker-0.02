@@ -92,7 +92,7 @@ export const EXPENSE_CATEGORY_EMOJIS: Record<ExpenseCategory, string> = {
   indian_market: '🌶️',
   electricity: '⚡',
   gas_cylinder: '🔥',
-  staff_salary: '👥',
+  staff: '👥',
   transport: '🚗',
   other: '📦',
 };

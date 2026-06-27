@@ -9,25 +9,80 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useAuthStore, useUIStore } from '@/store';
-import { COLORS, FONTS, RADIUS, SHADOW, SPACING } from '@/constants/theme';
+import { COLORS, SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { verifySheetsConnection, VerifyResult } from '@/services/sheets.service';
+import { changeUserMpin } from '@/services/staff.service';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SettingsScreen() {
-  const { user, signOut } = useAuthStore();
+  const { user, activeStaff, switchStaff, logoutStaff, signOut } = useAuthStore();
   const { language, theme, setLanguage, setTheme } = useUIStore();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
 
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+
+  // Pinpad modal state
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinText, setPinText] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  // Change MPIN state
+  const [changeMpinModalVisible, setChangeMpinModalVisible] = useState(false);
+  const [currentMpin, setCurrentMpin] = useState('');
+  const [newMpin, setNewMpin] = useState('');
+  const [confirmNewMpin, setConfirmNewMpin] = useState('');
+  const [changingMpin, setChangingMpin] = useState(false);
+
+  const handleChangeMpin = async () => {
+    const targetUser = activeStaff || user;
+    if (!targetUser) return;
+
+    if (!currentMpin || !newMpin || !confirmNewMpin) {
+      Alert.alert('Error', 'Please fill in all fields.');
+      return;
+    }
+
+    if (currentMpin.length !== 4 || newMpin.length !== 4 || confirmNewMpin.length !== 4) {
+      Alert.alert('Error', 'MPIN must be exactly 4 digits.');
+      return;
+    }
+
+    if (newMpin !== confirmNewMpin) {
+      Alert.alert('Error', 'New MPINs do not match.');
+      return;
+    }
+
+    if (currentMpin === newMpin) {
+      Alert.alert('Error', 'New MPIN cannot be the same as the current MPIN.');
+      return;
+    }
+
+    setChangingMpin(true);
+    try {
+      await changeUserMpin(targetUser.id, currentMpin, newMpin);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'MPIN changed successfully.');
+      setChangeMpinModalVisible(false);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to change MPIN.');
+    } finally {
+      setChangingMpin(false);
+    }
+  };
 
   useEffect(() => {
     handleVerifySheets(true);
@@ -63,6 +118,36 @@ export default function SettingsScreen() {
     }
   };
 
+  const handlePinPress = async (digit: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPinError('');
+    if (pinText.length >= 4) return;
+    
+    const newPin = pinText + digit;
+    setPinText(newPin);
+
+    if (newPin.length === 4) {
+      // Trigger verify
+      const success = await switchStaff(newPin);
+      if (success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setPinModalVisible(false);
+        setPinText('');
+        Alert.alert('Success', 'User profile updated');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setPinError('Invalid MPIN');
+        setPinText('');
+      }
+    }
+  };
+
+  const handlePinBackspace = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPinText(pinText.slice(0, -1));
+    setPinError('');
+  };
+
   const SectionHeader = ({ title }: { title: string }) => (
     <Text style={styles.sectionHeader}>{title.toUpperCase()}</Text>
   );
@@ -90,11 +175,11 @@ export default function SettingsScreen() {
     >
       {icon && (
         <View style={styles.iconContainer}>
-          <Ionicons name={icon} size={20} color={danger ? COLORS.danger : '#64748B'} />
+          <Ionicons name={icon} size={20} color={danger ? '#EF4444' : '#64748B'} />
         </View>
       )}
       <View style={styles.rowInfo}>
-        <Text style={[styles.rowLabel, { color: danger ? COLORS.danger : '#0F172A' }]}>
+        <Text style={[styles.rowLabel, { color: danger ? '#EF4444' : '#0F172A' }]}>
           {label}
         </Text>
         {subtitle && (
@@ -113,20 +198,26 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        {/* Profile Header (Business Profile & Dark Mode) */}
+        {/* Profile Header (Business Profile & Active User) */}
         <View style={[styles.card, styles.profileCard, SHADOW.sm]}>
           <View style={styles.profileContent}>
-            <View style={[styles.avatar, { backgroundColor: COLORS.primary + '20' }]}>
+            <View style={[styles.avatar, { backgroundColor: '#FFEDD5' }]}>
               <Image 
                 source={require('../../assets/logo.png')} 
                 style={styles.avatarImage} 
               />
             </View>
             <View style={styles.profileText}>
-              <Text style={styles.restaurantName}>Sabarish Foods</Text>
-              <Text style={styles.userEmail}>{user?.email ?? 'sabarishfoods@gmail.com'}</Text>
-              <View style={styles.roleBadge}>
-                <Text style={styles.roleText}>{user?.role === 'owner' ? 'Owner' : 'Staff'}</Text>
+              <Text style={styles.restaurantName}>
+                {activeStaff ? activeStaff.full_name : 'Sabarish Foods'}
+              </Text>
+              <Text style={styles.userEmail}>
+                {activeStaff ? `Phone: ${activeStaff.phone_number}` : (user?.email ?? 'sabarishfoods@gmail.com')}
+              </Text>
+              <View style={[styles.roleBadge, activeStaff && styles.roleBadgeStaff]}>
+                <Text style={[styles.roleText, activeStaff && styles.roleTextStaff]}>
+                  {activeStaff ? (activeStaff.role.charAt(0).toUpperCase() + activeStaff.role.slice(1)) : 'Owner'}
+                </Text>
               </View>
             </View>
           </View>
@@ -138,88 +229,123 @@ export default function SettingsScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 await setTheme(v ? 'dark' : 'light');
               }}
-              trackColor={{ false: '#E2E8F0', true: COLORS.primary }}
+              trackColor={{ false: '#E2E8F0', true: '#F97316' }}
               thumbColor={'#FFF'}
             />
           </View>
         </View>
 
-        {/* Preferences */}
-        <SectionHeader title="Preferences" />
-        
-        {/* Language Selector */}
-        <View style={[styles.card, styles.languageCard, SHADOW.sm]}>
-          {(['en', 'ta'] as const).map((lang) => (
-            <TouchableOpacity
-              key={lang}
-              style={[
-                styles.languageSegment,
-                language === lang && { backgroundColor: COLORS.primary },
-              ]}
-              onPress={async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                await setLanguage(lang);
-              }}
-            >
-              <Text
-                style={[
-                  styles.languageText,
-                  { color: language === lang ? '#FFF' : '#64748B' },
-                ]}
-              >
-                {lang === 'ta' ? 'Tamil' : 'English'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
+        {/* Security */}
+        <SectionHeader title="Security" />
         <View style={[styles.card, SHADOW.sm]}>
           <SettingRow
-            icon="notifications-outline"
-            label="Notifications"
-            onPress={() => {}}
+            icon="key-outline"
+            label="Change My MPIN"
+            subtitle="Update your 4-digit security code"
+            onPress={() => {
+              setCurrentMpin('');
+              setNewMpin('');
+              setConfirmNewMpin('');
+              setChangeMpinModalVisible(true);
+            }}
           />
-          <View style={styles.divider} />
-          <SettingRow
-            icon="cloud-upload-outline"
-            label="Backup & Restore"
-            onPress={() => {}}
-          />
+          {!activeStaff && (
+            <>
+              <View style={styles.divider} />
+              <SettingRow
+                icon="lock-closed-outline"
+                label="Switch to Staff Mode"
+                subtitle="Lock dashboard or change user profile"
+                onPress={() => {
+                  setPinError('');
+                  setPinText('');
+                  setPinModalVisible(true);
+                }}
+              />
+            </>
+          )}
         </View>
 
-        {/* Integration */}
-        <SectionHeader title="Integration" />
-        <View style={[styles.card, SHADOW.sm]}>
-          <View style={styles.sheetsHeader}>
-            <View style={styles.sheetsTitleRow}>
-              <Ionicons name="document-text-outline" size={20} color="#64748B" style={{marginRight: 12}} />
-              <View>
-                <Text style={styles.rowLabel}>Google Sheets Connection</Text>
-                {verifyResult && (
-                  <View style={styles.statusRow}>
-                    <View style={[styles.statusDot, { backgroundColor: verifyResult.connected ? COLORS.success : COLORS.danger }]} />
-                    <Text style={[styles.statusText, { color: verifyResult.connected ? COLORS.successDark : COLORS.dangerDark }]}>
-                      {verifyResult.connected ? 'Connected' : 'Not Connected'}
-                    </Text>
+        {!activeStaff && (
+          <>
+            {/* Preferences */}
+            <SectionHeader title="Preferences" />
+            
+            {/* Language Selector */}
+            <View style={[styles.card, styles.languageCard, SHADOW.sm]}>
+              {(['en', 'ta'] as const).map((lang) => (
+                <TouchableOpacity
+                  key={lang}
+                  style={[
+                    styles.languageSegment,
+                    language === lang && { backgroundColor: '#F97316' },
+                  ]}
+                  onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    await setLanguage(lang);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.languageText,
+                      { color: language === lang ? '#FFF' : '#64748B' },
+                    ]}
+                  >
+                    {lang === 'ta' ? 'Tamil' : 'English'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.card, SHADOW.sm]}>
+              <SettingRow
+                icon="notifications-outline"
+                label="Notifications"
+                onPress={() => {}}
+              />
+              <View style={styles.divider} />
+              <SettingRow
+                icon="cloud-upload-outline"
+                label="Backup & Restore"
+                onPress={() => {}}
+              />
+            </View>
+
+            {/* Integration */}
+            <SectionHeader title="Integration" />
+            <View style={[styles.card, SHADOW.sm]}>
+              <View style={styles.sheetsHeader}>
+                <View style={styles.sheetsTitleRow}>
+                  <Ionicons name="document-text-outline" size={20} color="#64748B" style={{marginRight: 12}} />
+                  <View>
+                    <Text style={styles.rowLabel}>Google Sheets Connection</Text>
+                    {verifyResult && (
+                      <View style={styles.statusRow}>
+                        <View style={[styles.statusDot, { backgroundColor: verifyResult.connected ? '#22C55E' : '#EF4444' }]} />
+                        <Text style={[styles.statusText, { color: verifyResult.connected ? '#15803D' : '#B91C1C' }]}>
+                          {verifyResult.connected ? 'Connected' : 'Not Connected'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                )}
+                </View>
+                <TouchableOpacity 
+                  style={[styles.connectBtn, { backgroundColor: verifyResult?.connected ? '#F1F5F9' : '#F97316' }]}
+                  onPress={() => handleVerifySheets(false)}
+                  disabled={verifying}
+                >
+                  {verifying ? (
+                    <ActivityIndicator size="small" color={verifyResult?.connected ? '#F97316' : '#FFF'} />
+                  ) : (
+                    <Text style={[styles.connectBtnText, { color: verifyResult?.connected ? '#F97316' : '#FFF' }]}>
+                      {verifyResult?.connected ? 'Reconnect' : 'Connect'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-            <TouchableOpacity 
-              style={[styles.connectBtn, { backgroundColor: verifyResult?.connected ? '#F1F5F9' : COLORS.primary }]}
-              onPress={() => handleVerifySheets(false)}
-              disabled={verifying}
-            >
-              {verifying ? (
-                <ActivityIndicator size="small" color={verifyResult?.connected ? COLORS.primary : '#FFF'} />
-              ) : (
-                <Text style={[styles.connectBtnText, { color: verifyResult?.connected ? COLORS.primary : '#FFF' }]}>
-                  {verifyResult?.connected ? 'Reconnect' : 'Connect'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+          </>
+        )}
 
         {/* Account */}
         <SectionHeader title="Account" />
@@ -233,12 +359,150 @@ export default function SettingsScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Pinpad Modal Overlay */}
+      <Modal visible={pinModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pinpadCard, SHADOW.lg]}>
+            <TouchableOpacity 
+              style={styles.closeBtn} 
+              onPress={() => setPinModalVisible(false)}
+            >
+              <Ionicons name="close" size={24} color="#0F172A" />
+            </TouchableOpacity>
+
+            <Text style={styles.pinTitle}>Enter MPIN</Text>
+            <Text style={styles.pinSubtitle}>
+              {activeStaff ? 'Enter Owner MPIN to switch back' : 'Enter Staff or Owner MPIN'}
+            </Text>
+
+            {/* Dots */}
+            <View style={styles.dotsRow}>
+              {[0, 1, 2, 3].map((index) => (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.dot, 
+                    pinText.length > index && styles.dotFilled,
+                    pinError.length > 0 && styles.dotError
+                  ]} 
+                />
+              ))}
+            </View>
+
+            {pinError.length > 0 && (
+              <Text style={styles.errorText}>{pinError}</Text>
+            )}
+
+            {/* Grid */}
+            <View style={styles.grid}>
+              {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, rIndex) => (
+                <View key={rIndex} style={styles.gridRow}>
+                  {row.map((digit) => (
+                    <TouchableOpacity 
+                      key={digit} 
+                      style={styles.keyBtn}
+                      onPress={() => handlePinPress(digit)}
+                    >
+                      <Text style={styles.keyText}>{digit}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+              <View style={styles.gridRow}>
+                <View style={styles.keyBtnEmpty} />
+                <TouchableOpacity 
+                  style={styles.keyBtn}
+                  onPress={() => handlePinPress('0')}
+                >
+                  <Text style={styles.keyText}>0</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.keyBtn}
+                  onPress={handlePinBackspace}
+                >
+                  <Ionicons name="backspace-outline" size={24} color="#0F172A" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Change MPIN Modal Overlay */}
+      <Modal visible={changeMpinModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={[styles.modal, { backgroundColor: '#F8F9FA' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Change My MPIN</Text>
+            <TouchableOpacity onPress={() => setChangeMpinModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+          <KeyboardAvoidingView 
+            style={{ flex: 1 }} 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+              <View style={[styles.card, { padding: 24, gap: 16 }]}>
+                <Input
+                  label="Current 4-Digit MPIN"
+                  value={currentMpin}
+                  onChangeText={setCurrentMpin}
+                  keyboardType="numeric"
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="Enter current MPIN"
+                />
+                <Input
+                  label="New 4-Digit MPIN"
+                  value={newMpin}
+                  onChangeText={setNewMpin}
+                  keyboardType="numeric"
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="Enter new MPIN"
+                />
+                <Input
+                  label="Confirm New 4-Digit MPIN"
+                  value={confirmNewMpin}
+                  onChangeText={setConfirmNewMpin}
+                  keyboardType="numeric"
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="Confirm new MPIN"
+                />
+                <Button
+                  title={changingMpin ? "Updating..." : "Update MPIN"}
+                  onPress={handleChangeMpin}
+                  loading={changingMpin}
+                  fullWidth
+                  size="lg"
+                  style={{ marginTop: 8 }}
+                />
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  modal: { flex: 1, backgroundColor: '#F8F9FA' },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalContent: { padding: 20 },
   scroll: {
     padding: 20,
     paddingBottom: 40,
@@ -298,10 +562,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFEDD5',
   },
+  roleBadgeStaff: {
+    backgroundColor: '#E0F2FE',
+    borderColor: '#BAE6FD',
+  },
   roleText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#EA580C',
+  },
+  roleTextStaff: {
+    color: '#0284C7',
   },
   darkModeToggle: {
     paddingLeft: 12,
@@ -390,5 +661,90 @@ const styles = StyleSheet.create({
   connectBtnText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+
+  // PIN Pad Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  pinpadCard: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 24,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  closeBtn: {
+    alignSelf: 'flex-end',
+    padding: 4,
+  },
+  pinTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  pinSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 20,
+  },
+  dot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+  },
+  dotFilled: {
+    backgroundColor: '#F97316',
+    borderColor: '#F97316',
+  },
+  dotError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#EF4444',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  grid: {
+    width: '100%',
+    maxWidth: 280,
+    gap: 12,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  keyBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  keyBtnEmpty: {
+    width: 64,
+    height: 64,
+  },
+  keyText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0F172A',
   },
 });

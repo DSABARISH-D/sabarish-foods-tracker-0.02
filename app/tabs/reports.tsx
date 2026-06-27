@@ -50,7 +50,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   gas_cylinder: '#96CEB4',
   electricity: '#FFEEAD',
   indian_market: '#D4A5A5',
-  staff_salary: '#A8E6CF',
+  staff: '#A8E6CF',
   transport: '#FFD3B6',
   other: '#DCDCDC',
 };

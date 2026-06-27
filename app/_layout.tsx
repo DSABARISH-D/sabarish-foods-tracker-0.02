@@ -37,6 +37,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="tabs" />
+        <Stack.Screen name="kadan" options={{ animation: 'slide_from_right' }} />
       </Stack>
       <OfflineBanner />
     </>

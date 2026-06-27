@@ -14,9 +14,11 @@ export type ExpenseCategory =
   | 'indian_market'
   | 'electricity'
   | 'gas_cylinder'
-  | 'staff_salary'
+  | 'staff'
   | 'transport'
   | 'other';
+export type StaffRole = 'cook' | 'cashier' | 'server' | 'delivery' | 'cleaner' | 'manager' | 'owner' | 'other';
+export type StaffStatus = 'active' | 'inactive';
 export type KadanStatus = 'pending' | 'paid' | 'overdue';
 export type InventoryItem = 'chicken' | 'oil' | 'masala' | 'rice' | 'gas' | 'other';
 export type ReportPeriod = 'daily' | 'weekly' | 'monthly';
@@ -76,6 +78,85 @@ export interface ExpenseForm {
   date: string;
   chicken_kg?: number;
   chicken_price_per_kg?: number;
+}
+
+// ── Staff ─────────────────────────────────────────────────────────────
+export interface Staff {
+  id: string;
+  owner_id: string;
+  full_name: string;
+  phone_number: string;
+  role: StaffRole;
+  mpin_hash: string;
+  monthly_salary: number;
+  joining_date: string;
+  status: StaffStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StaffForm {
+  full_name: string;
+  phone_number: string;
+  role: StaffRole;
+  mpin: string;
+  monthly_salary: number;
+  joining_date: string;
+  status: StaffStatus;
+}
+
+// ── Salary Payment ────────────────────────────────────────────────────
+export interface SalaryPayment {
+  id: string;
+  staff_id: string;
+  owner_id: string;
+  amount: number;
+  salary_month: string;
+  paid_date: string;
+  expense_id?: string;
+  notes?: string;
+  created_at: string;
+  // Joined data
+  staff_name?: string;
+}
+
+// ── Login History ─────────────────────────────────────────────────────
+export interface LoginHistoryEntry {
+  id: string;
+  staff_id?: string;
+  owner_id: string;
+  user_name: string;
+  user_type: 'owner' | 'staff';
+  login_date: string;
+  login_time: string;
+  logout_time?: string;
+  created_at: string;
+}
+
+// ── Staff Permissions ─────────────────────────────────────────────────
+export interface StaffPermissions {
+  id: string;
+  staff_id: string;
+  owner_id: string;
+  dashboard: boolean;
+  expenses: boolean;
+  inventory: boolean;
+  credit: boolean;
+  reports: boolean;
+  settings: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Attendance ────────────────────────────────────────────────────────
+export interface AttendanceRecord {
+  id: string;
+  staff_id: string;
+  owner_id: string;
+  date: string;
+  status: 'present' | 'absent' | 'half_day' | 'leave';
+  created_at: string;
+  updated_at: string;
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────

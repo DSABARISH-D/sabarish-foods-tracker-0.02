@@ -8,7 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 async function testSupabase() {
   console.log("Starting Supabase connection test...");
   
-  const tables = ['users', 'sales', 'expenses', 'inventory', 'cash_balance', 'kadan'];
+  const tables = ['users', 'sales', 'expenses', 'inventory', 'cash_balance', 'kadan', 'staff', 'attendance'];
   const results = {};
   let totalErrors = 0;
 

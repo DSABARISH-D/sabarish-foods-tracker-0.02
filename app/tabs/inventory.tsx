@@ -25,7 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 
 export default function InventoryScreen() {
-  const { user } = useAuthStore();
+  const { user, activeStaff, activePermissions } = useAuthStore();
   const { inventory, inventoryLoading, loadInventory, updateStock } =
     useInventoryStore();
   const { t } = useTranslation();
@@ -162,6 +162,7 @@ export default function InventoryScreen() {
                 key={item.id} 
                 style={[styles.itemCard, SHADOW.sm]}
                 activeOpacity={0.7}
+                disabled={!!activeStaff && !activePermissions?.inventory}
                 onPress={() => {
                   setSelectedItem(item);
                   setNewQty('');
@@ -210,13 +211,15 @@ export default function InventoryScreen() {
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity
-        style={[styles.fab, SHADOW.md]}
-        activeOpacity={0.8}
-        onPress={() => setShowCreateModal(true)}
-      >
-        <Ionicons name="add" size={28} color="#FFF" />
-      </TouchableOpacity>
+      {(!activeStaff || activePermissions?.inventory) && (
+        <TouchableOpacity
+          style={[styles.fab, SHADOW.md]}
+          activeOpacity={0.8}
+          onPress={() => setShowCreateModal(true)}
+        >
+          <Ionicons name="add" size={28} color="#FFF" />
+        </TouchableOpacity>
+      )}
 
       {/* Update Stock Modal */}
       <Modal

@@ -10,6 +10,7 @@
     "home": "முகப்பு",
     "expenses": "செலவுகள்",
     "kadan": "கடன்",
+    "staff": "பணியாளர்கள்",
     "reports": "அறிக்கைகள்",
     "inventory": "சரக்கு",
     "settings": "அமைப்புகள்"
@@ -62,7 +63,8 @@
       "indian_market": "இந்திய சந்தை",
       "electricity": "மின்சாரம்",
       "gas_cylinder": "கேஸ் சிலிண்டர்",
-      "staff_salary": "ஊழியர் சம்பளம்",
+      "staff": "ஊழியர்கள்",
+      "credit_kadan": "கடன் (Kadan)",
       "transport": "போக்குவரத்து",
       "other": "மற்றவை"
     }

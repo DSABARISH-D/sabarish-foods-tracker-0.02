@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { router } from 'expo-router';
 import {
   View,
   Text,
@@ -12,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useExpensesStore } from '@/store';
+import { useExpensesStore, useAuthStore } from '@/store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ChickenCalculator } from '@/components/expenses/ChickenCalculator';
@@ -25,14 +26,15 @@ import { ExpenseCategory, ExpenseForm } from '@/types';
 import { getTodayDate, formatCurrency } from '@/lib/utils';
 import { Ionicons } from '@expo/vector-icons';
 
-const CATEGORIES: { key: ExpenseCategory; icon: any }[] = [
+const CATEGORIES: { key: any; icon: any }[] = [
   { key: 'chicken_cost', icon: 'fast-food-outline' },
   { key: 'store_purchases', icon: 'cart-outline' },
   { key: 'market_purchases', icon: 'basket-outline' },
   { key: 'indian_market', icon: 'leaf-outline' },
   { key: 'electricity', icon: 'flash-outline' },
   { key: 'gas_cylinder', icon: 'flame-outline' },
-  { key: 'staff_salary', icon: 'people-outline' },
+  { key: 'staff', icon: 'people-outline' },
+  { key: 'credit_kadan', icon: 'wallet-outline' },
   { key: 'transport', icon: 'car-outline' },
   { key: 'other', icon: 'cube-outline' },
 ];
@@ -40,6 +42,7 @@ const CATEGORIES: { key: ExpenseCategory; icon: any }[] = [
 export default function ExpensesScreen() {
   const { expenses, expensesLoading, isDayLocked, loadExpenses, checkDayLocked, addExpense, removeExpense, lockDay } =
     useExpensesStore();
+  const { activeStaff, activePermissions } = useAuthStore();
   const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -165,23 +168,30 @@ export default function ExpensesScreen() {
               <Text style={styles.totalAmount}>{formatCurrency(todayTotal)}</Text>
             </View>
           </View>
-          
-          {isDayLocked && (
-            <View style={styles.lockedBanner}>
-              <Ionicons name="lock-closed" size={16} color="#0F172A" />
-              <Text style={styles.lockedText}>Day Locked</Text>
-            </View>
-          )}
 
           {/* Category Picker */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
             <View style={styles.catRow}>
               {CATEGORIES.map((cat) => {
+                if (activeStaff) {
+                  if (cat.key === 'staff') return null;
+                  if (cat.key === 'credit_kadan' && !activePermissions?.credit) return null;
+                }
                 const isActive = selectedCategory === cat.key;
                 return (
                   <TouchableOpacity
                     key={cat.key}
                     onPress={() => {
+                      if (cat.key === 'staff') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        router.push('/tabs/staff');
+                        return;
+                      }
+                      if (cat.key === 'credit_kadan') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        router.push('/kadan');
+                        return;
+                      }
                       setSelectedCategory(cat.key);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
@@ -215,78 +225,64 @@ export default function ExpensesScreen() {
           )}
 
           {/* Form */}
-          {!isDayLocked && (
-            <View style={[styles.formCard, SHADOW.sm]}>
-              <Input
-                label={t('expenses.amount')}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-                prefix="₹"
-                placeholder="0.00"
-                error={amountError}
-                required
-              />
+          <View style={[styles.formCard, SHADOW.sm]}>
+            <Input
+              label={t('expenses.amount')}
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              prefix="₹"
+              placeholder="0.00"
+              error={amountError}
+              required
+            />
 
-              {selectedCategory === 'gas_cylinder' && (
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={styles.inputLabel}>
-                    {t('expenses.date')}
+            {selectedCategory === 'gas_cylinder' && (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={styles.inputLabel}>
+                  {t('expenses.date')}
+                </Text>
+                <TouchableOpacity
+                  style={styles.datePickerBtn}
+                  onPress={() => setShowGasPicker(true)}
+                >
+                  <Text style={styles.datePickerText}>
+                    {gasDate.toISOString().split('T')[0]}
                   </Text>
-                  <TouchableOpacity
-                    style={styles.datePickerBtn}
-                    onPress={() => setShowGasPicker(true)}
-                  >
-                    <Text style={styles.datePickerText}>
-                      {gasDate.toISOString().split('T')[0]}
-                    </Text>
-                    <Ionicons name="calendar-outline" size={20} color="#64748B" />
-                  </TouchableOpacity>
-                  {showGasPicker && (
-                    <DateTimePicker
-                      value={gasDate}
-                      mode="date"
-                      display="default"
-                      onChange={(event, date) => {
-                        setShowGasPicker(false);
-                        if (date) setGasDate(date);
-                      }}
-                    />
-                  )}
-                </View>
-              )}
+                  <Ionicons name="calendar-outline" size={20} color="#64748B" />
+                </TouchableOpacity>
+                {showGasPicker && (
+                  <DateTimePicker
+                    value={gasDate}
+                    mode="date"
+                    display="default"
+                    onChange={(event, date) => {
+                      setShowGasPicker(false);
+                      if (date) setGasDate(date);
+                    }}
+                  />
+                )}
+              </View>
+            )}
 
-              {!['chicken_cost', 'store_purchases', 'market_purchases', 'indian_market'].includes(selectedCategory) && (
-                <Input
-                  label={t('expenses.description')}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Optional description..."
-                  multiline
-                  numberOfLines={2}
-                />
-              )}
-              <Button
-                title={saving ? t('common.loading') : t('expenses.save')}
-                onPress={handleSave}
-                loading={saving}
-                fullWidth
-                style={{ marginTop: 8 }}
+            {!['chicken_cost', 'store_purchases', 'market_purchases', 'indian_market'].includes(selectedCategory) && (
+              <Input
+                label={t('expenses.description')}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Optional description..."
+                multiline
+                numberOfLines={2}
               />
-            </View>
-          )}
-
-          {/* Lock Day Button */}
-          {!isDayLocked && expenses.length > 0 && (
-            <TouchableOpacity
-              style={[styles.lockBtn, SHADOW.sm]}
-              onPress={handleLockDay}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="lock-closed" size={20} color="#FFF" />
-              <Text style={styles.lockBtnText}>{t('expenses.lock_day')}</Text>
-            </TouchableOpacity>
-          )}
+            )}
+            <Button
+              title={saving ? t('common.loading') : t('expenses.save')}
+              onPress={handleSave}
+              loading={saving}
+              fullWidth
+              style={{ marginTop: 8 }}
+            />
+          </View>
 
           {/* Expense List */}
           <Text style={styles.sectionLabel}>
@@ -320,19 +316,14 @@ export default function ExpensesScreen() {
                         {expense.description}
                       </Text>
                     ) : null}
-                    {expense.locked && (
-                      <Text style={styles.lockedTag}><Ionicons name="lock-closed" size={10} /> {t('expenses.locked')}</Text>
-                    )}
                   </View>
                   <View style={styles.expenseRight}>
                     <Text style={styles.expenseAmount}>
                       {formatCurrency(expense.amount)}
                     </Text>
-                    {!expense.locked && (
-                      <TouchableOpacity onPress={() => handleDelete(expense.id)} style={{ padding: 4 }}>
-                        <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity onPress={() => handleDelete(expense.id)} style={{ padding: 4 }}>
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))}

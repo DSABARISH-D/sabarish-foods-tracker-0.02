@@ -7,6 +7,7 @@
     "home": "Home",
     "expenses": "Expenses",
     "kadan": "Credit",
+    "staff": "Staff",
     "reports": "Reports",
     "inventory": "Inventory",
     "settings": "Settings"
@@ -59,7 +60,8 @@
       "indian_market": "Indian Market",
       "electricity": "Electricity",
       "gas_cylinder": "Gas Cylinder",
-      "staff_salary": "Staff Salary",
+      "staff": "Staff",
+      "credit_kadan": "Credit (Kadan)",
       "transport": "Transport",
       "other": "Other"
     }

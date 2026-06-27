@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setLocale } from '@/lib/i18n';
+import { supabase } from '@/lib/supabase';
 import {
   CashBalance,
   CashBalanceUpdate,
@@ -15,6 +16,8 @@ import {
   SaleForm,
   Theme,
   User,
+  Staff,
+  StaffPermissions,
 } from '@/types';
 import {
   signInWithEmail,
@@ -49,27 +52,134 @@ export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 // ── Auth Store ────────────────────────────────────────────────────────
 interface AuthStore {
   user: User | null;
+  currentUser: any | null;
+  activeStaff: Staff | null;
+  activePermissions: StaffPermissions | null;
   isLoading: boolean;
   _hasHydrated: boolean;
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  switchStaff: (mpin: string) => Promise<boolean>;
+  loginWithMpin: (mpin: string) => Promise<{ success: boolean; forceChangePin?: boolean; user?: any; error?: string }>;
+  completeFirstLogin: (userId: string, newMpin: string) => Promise<{ success: boolean; error?: string }>;
+  logoutStaff: () => void;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+// Simple deterministic hash for MPIN compatibility
+async function hashMpin(mpin: string): Promise<string> {
+  let hash = 0;
+  const salt = 'sabarish_foods_2026';
+  const salted = salt + mpin + salt;
+  for (let i = 0; i < salted.length; i++) {
+    const char = salted.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  let result = Math.abs(hash).toString(36);
+  for (let round = 0; round < 3; round++) {
+    let h = 0;
+    const input = result + mpin + round.toString();
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charCodeAt(i);
+      h = ((h << 5) - h) + char;
+      h = h & h;
+    }
+    result += Math.abs(h).toString(36);
+  }
+  return `shash$${result}`;
+}
+
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
+  currentUser: null,
+  activeStaff: null,
+  activePermissions: null,
   isLoading: true,
   _hasHydrated: false,
 
   initialize: async () => {
+    set({ isLoading: true });
     try {
-      const session = await getSession();
-      if (session?.user) {
-        const profile = await getUserProfile(session.user.id);
-        set({ user: profile ?? ({ id: session.user.id, email: session.user.email ?? '' } as User) });
+      // 1. Silent Auth Sign In (Shared background session for RLS to work)
+      let session = await getSession();
+      if (!session?.user) {
+        try {
+          const authRes = await signInWithEmail('sabarishfoods@gmail.com', '091230');
+          session = { user: authRes.user } as any;
+        } catch {
+          // Account doesn't exist, sign up
+          const signUpRes = await supabase.auth.signUp({
+            email: 'sabarishfoods@gmail.com',
+            password: '091230',
+          });
+          session = { user: signUpRes.data.user } as any;
+        }
       }
-    } catch {
-      set({ user: null });
+
+      if (session?.user) {
+        // Logged into Supabase Auth
+        // Now check if owner profile exists in users table
+        const { data: ownerProfile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'owner')
+          .limit(1);
+
+        let owner = ownerProfile?.[0];
+
+        if (!owner) {
+          // Create default owner account
+          const defaultMpinHash = await hashMpin('0909');
+          const { data: newOwner } = await supabase
+            .from('users')
+            .insert({
+              id: session.user.id,
+              email: 'sabarishfoods@gmail.com',
+              full_name: 'Sabarish',
+              role: 'owner',
+              mpin_hash: defaultMpinHash,
+              status: 'active',
+              first_login_completed: false,
+            })
+            .select()
+            .single();
+
+          if (newOwner) {
+            owner = newOwner;
+            // Insert default owner permissions
+            await supabase.from('permissions').insert({
+              user_id: newOwner.id,
+              can_view_home: true,
+              can_manage_expenses: true,
+              can_manage_inventory: true,
+              can_manage_credit: true,
+              can_view_reports: true,
+              can_manage_staff: true,
+              can_manage_settings: true,
+            });
+          }
+        }
+
+        // Save session user
+        set({ user: owner ?? ({ id: session.user.id, email: session.user.email ?? '' } as User) });
+
+        // Restore logged in user session from AsyncStorage
+        const cachedUserStr = await AsyncStorage.getItem('@sabarish_current_user');
+        const cachedStaffStr = await AsyncStorage.getItem('@sabarish_active_staff');
+        const cachedPermsStr = await AsyncStorage.getItem('@sabarish_active_perms');
+
+        if (cachedUserStr) {
+          const cachedUser = JSON.parse(cachedUserStr);
+          set({
+            currentUser: cachedUser,
+            activeStaff: cachedStaffStr ? JSON.parse(cachedStaffStr) : null,
+            activePermissions: cachedPermsStr ? JSON.parse(cachedPermsStr) : null,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Initialize error:', e);
     } finally {
       set({ isLoading: false, _hasHydrated: true });
     }
@@ -81,7 +191,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { user } = await signInWithEmail(email, password);
       if (user) {
         const profile = await getUserProfile(user.id);
-        set({ user: profile ?? ({ id: user.id, email: user.email ?? '' } as User) });
+        const u = profile ?? ({ id: user.id, email: user.email ?? '' } as User);
+        set({ user: u, currentUser: u });
+        set({ activeStaff: null, activePermissions: null });
+        await AsyncStorage.setItem('@sabarish_current_user', JSON.stringify(u));
+        await AsyncStorage.removeItem('@sabarish_active_staff');
+        await AsyncStorage.removeItem('@sabarish_active_perms');
       }
     } finally {
       set({ isLoading: false });
@@ -89,8 +204,262 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   signOut: async () => {
-    await signOutUser();
-    set({ user: null });
+    const currentUser = get().currentUser;
+    if (currentUser) {
+      try {
+        const { data } = await supabase
+          .from('login_history')
+          .select('id')
+          .eq('user_id', currentUser.id)
+          .is('logout_time', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          const nowStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+          await supabase
+            .from('login_history')
+            .update({ logout_time: nowStr })
+            .eq('id', data[0].id);
+        }
+      } catch (e) {
+        console.error('Logout logging failed', e);
+      }
+    }
+
+    set({ currentUser: null, activeStaff: null, activePermissions: null });
+    await AsyncStorage.removeItem('@sabarish_current_user');
+    await AsyncStorage.removeItem('@sabarish_active_staff');
+    await AsyncStorage.removeItem('@sabarish_active_perms');
+  },
+
+  loginWithMpin: async (mpin: string) => {
+    set({ isLoading: true });
+    try {
+      const mpinHash = await hashMpin(mpin);
+      
+      // Query users table for matching MPIN
+      const { data: matchedUsers, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('mpin_hash', mpinHash)
+        .eq('status', 'active');
+
+      if (error || !matchedUsers || matchedUsers.length === 0) {
+        set({ isLoading: false });
+        return { success: false, error: 'Invalid MPIN' };
+      }
+
+      const loggedUser = matchedUsers[0];
+
+      // If it is default owner first login, return first login status
+      if (loggedUser.role === 'owner' && !loggedUser.first_login_completed && mpin === '0909') {
+        set({ isLoading: false });
+        return { success: true, forceChangePin: true, user: loggedUser };
+      }
+
+      // Load permissions
+      let permissions = null;
+      if (loggedUser.role === 'staff') {
+        const { data: permsData } = await supabase
+          .from('permissions')
+          .select('*')
+          .eq('user_id', loggedUser.id)
+          .single();
+        if (permsData) {
+          permissions = {
+            id: permsData.id,
+            staff_id: permsData.user_id,
+            owner_id: permsData.user_id,
+            dashboard: permsData.can_view_home,
+            expenses: permsData.can_manage_expenses,
+            inventory: permsData.can_manage_inventory,
+            credit: permsData.can_manage_credit,
+            reports: permsData.can_view_reports,
+            settings: permsData.can_manage_settings,
+            created_at: permsData.created_at,
+            updated_at: permsData.updated_at,
+          };
+        }
+      } else {
+        // Owner has full permissions
+        permissions = {
+          id: 'owner-perms',
+          staff_id: loggedUser.id,
+          owner_id: loggedUser.id,
+          dashboard: true,
+          expenses: true,
+          inventory: true,
+          credit: true,
+          reports: true,
+          settings: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      }
+
+      // Record login history
+      await supabase.from('login_history').insert({
+        user_id: loggedUser.id,
+        user_name: loggedUser.full_name,
+        user_type: loggedUser.role,
+      });
+
+      // Update state
+      set({
+        currentUser: loggedUser,
+        activeStaff: loggedUser.role === 'staff' ? loggedUser : null,
+        activePermissions: permissions,
+      });
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('@sabarish_current_user', JSON.stringify(loggedUser));
+      if (loggedUser.role === 'staff') {
+        await AsyncStorage.setItem('@sabarish_active_staff', JSON.stringify(loggedUser));
+        await AsyncStorage.setItem('@sabarish_active_perms', JSON.stringify(permissions));
+      } else {
+        await AsyncStorage.removeItem('@sabarish_active_staff');
+        await AsyncStorage.removeItem('@sabarish_active_perms');
+      }
+
+      set({ isLoading: false });
+      return { success: true, forceChangePin: false };
+    } catch (e: any) {
+      set({ isLoading: false });
+      return { success: false, error: e.message || 'Login failed' };
+    }
+  },
+
+  completeFirstLogin: async (userId: string, newMpin: string) => {
+    set({ isLoading: true });
+    try {
+      const newMpinHash = await hashMpin(newMpin);
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update({
+          mpin_hash: newMpinHash,
+          first_login_completed: true,
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error || !updatedUser) {
+        set({ isLoading: false });
+        return { success: false, error: 'Failed to update MPIN' };
+      }
+
+      // Owner permissions
+      const permissions = {
+        id: 'owner-perms',
+        staff_id: updatedUser.id,
+        owner_id: updatedUser.id,
+        dashboard: true,
+        expenses: true,
+        inventory: true,
+        credit: true,
+        reports: true,
+        settings: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Record login history
+      await supabase.from('login_history').insert({
+        user_id: updatedUser.id,
+        user_name: updatedUser.full_name,
+        user_type: 'owner',
+      });
+
+      // Update state
+      set({
+        currentUser: updatedUser,
+        activeStaff: null,
+        activePermissions: permissions,
+      });
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('@sabarish_current_user', JSON.stringify(updatedUser));
+      await AsyncStorage.removeItem('@sabarish_active_staff');
+      await AsyncStorage.removeItem('@sabarish_active_perms');
+
+      set({ isLoading: false });
+      return { success: true };
+    } catch (e: any) {
+      set({ isLoading: false });
+      return { success: false, error: e.message || 'Operation failed' };
+    }
+  },
+
+  switchStaff: async (mpin: string) => {
+    const owner = get().user;
+    if (!owner) return false;
+    
+    try {
+      const mpinHash = await hashMpin(mpin);
+      
+      // Query users table for matching MPIN
+      const { data: userList, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('mpin_hash', mpinHash)
+        .eq('status', 'active');
+        
+      if (error || !userList || userList.length === 0) {
+        return false;
+      }
+      
+      const matchedUser = userList[0];
+      
+      if (matchedUser.role === 'owner') {
+        // Switch to Owner Mode
+        set({ currentUser: matchedUser, activeStaff: null, activePermissions: null });
+        await AsyncStorage.setItem('@sabarish_current_user', JSON.stringify(matchedUser));
+        await AsyncStorage.removeItem('@sabarish_active_staff');
+        await AsyncStorage.removeItem('@sabarish_active_perms');
+        
+        // Log history
+        await supabase.from('login_history').insert({
+          user_id: matchedUser.id,
+          user_name: matchedUser.full_name,
+          user_type: 'owner',
+        });
+        
+        return true;
+      } else {
+        // Load permissions
+        const { data: permsData } = await supabase
+          .from('permissions')
+          .select('*')
+          .eq('user_id', matchedUser.id)
+          .single();
+          
+        const permissions = permsData as StaffPermissions;
+        
+        set({ currentUser: matchedUser, activeStaff: matchedUser, activePermissions: permissions });
+        await AsyncStorage.setItem('@sabarish_current_user', JSON.stringify(matchedUser));
+        await AsyncStorage.setItem('@sabarish_active_staff', JSON.stringify(matchedUser));
+        await AsyncStorage.setItem('@sabarish_active_perms', JSON.stringify(permissions));
+        
+        // Log history
+        await supabase.from('login_history').insert({
+          user_id: matchedUser.id,
+          user_name: matchedUser.full_name,
+          user_type: 'staff',
+        });
+        
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  },
+
+  logoutStaff: () => {
+    set({ currentUser: null, activeStaff: null, activePermissions: null });
+    AsyncStorage.removeItem('@sabarish_current_user');
+    AsyncStorage.removeItem('@sabarish_active_staff');
+    AsyncStorage.removeItem('@sabarish_active_perms');
   },
 }));
 
@@ -222,10 +591,7 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
   },
 
   checkDayLocked: async (date: string) => {
-    const user = useAuthStore.getState().user;
-    if (!user) return;
-    const locked = await checkDayLocked(user.id, date);
-    set({ isDayLocked: locked });
+    set({ isDayLocked: false });
   },
 
   addExpense: async (form: ExpenseForm) => {

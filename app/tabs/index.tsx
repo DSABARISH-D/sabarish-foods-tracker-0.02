@@ -25,7 +25,7 @@ import { fetchDailyReportData } from '@/services/supabase.service';
 import { ReportDataPoint } from '@/types';
 
 export default function DashboardScreen() {
-  const { user } = useAuthStore();
+  const { user, activeStaff, activePermissions } = useAuthStore();
   const { stats, statsLoading, loadStats } = useDashboardStore();
   const { loadInventory } = useInventoryStore();
   const { loadKadan } = useKadanStore();
@@ -165,6 +165,7 @@ export default function DashboardScreen() {
                 <Text style={styles.statLabel}>Today's Sales</Text>
                 <Text style={styles.statValue}>{formatCurrency(s.today_sales)}</Text>
               </View>
+              
               <View style={[styles.card, styles.statCard, SHADOW.sm]}>
                 <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
                   <Ionicons name="trending-down-outline" size={20} color="#EF4444" />

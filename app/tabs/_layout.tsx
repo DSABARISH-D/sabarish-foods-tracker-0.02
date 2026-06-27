@@ -1,18 +1,19 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Tabs, useSegments, router } from 'expo-router';
+import { Platform, View, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, RADIUS, SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SyncToast } from '@/components/ui/SyncToast';
+import { useAuthStore } from '@/store';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface Tab {
   name: string;
-  key: 'home' | 'expenses' | 'kadan' | 'inventory' | 'reports' | 'settings';
+  key: 'home' | 'expenses' | 'staff' | 'inventory' | 'reports' | 'settings';
   icon: IoniconsName;
   iconActive: IoniconsName;
   titleKey: string;
@@ -21,7 +22,7 @@ interface Tab {
 const TAB_DEFS: Tab[] = [
   { name: 'index', key: 'home', icon: 'home-outline', iconActive: 'home-outline', titleKey: 'nav.home' },
   { name: 'expenses', key: 'expenses', icon: 'receipt-outline', iconActive: 'receipt-outline', titleKey: 'nav.expenses' },
-  { name: 'kadan', key: 'kadan', icon: 'people-outline', iconActive: 'people-outline', titleKey: 'nav.kadan' },
+  { name: 'staff', key: 'staff', icon: 'people-outline', iconActive: 'people-outline', titleKey: 'nav.staff' },
   { name: 'inventory', key: 'inventory', icon: 'cube-outline', iconActive: 'cube-outline', titleKey: 'nav.inventory' },
   { name: 'reports', key: 'reports', icon: 'bar-chart-outline', iconActive: 'bar-chart-outline', titleKey: 'nav.reports' },
   { name: 'settings', key: 'settings', icon: 'settings-outline', iconActive: 'settings-outline', titleKey: 'nav.settings' },
@@ -30,6 +31,26 @@ const TAB_DEFS: Tab[] = [
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const { activeStaff, activePermissions } = useAuthStore();
+  const segments = useSegments();
+
+  // Route Protection Guard
+  React.useEffect(() => {
+    if (activeStaff) {
+      const activeTab = segments[1]; // 'index' / 'expenses' / 'staff' / 'inventory' / 'reports' / 'settings'
+      if (!activeTab) return;
+
+      let isAllowed = true;
+      if (activeTab === 'staff') {
+        isAllowed = false;
+      }
+
+      if (!isAllowed) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        router.replace('/tabs');
+      }
+    }
+  }, [segments, activeStaff]);
 
   return (
     <>
@@ -55,22 +76,33 @@ export default function TabLayout() {
           },
         }}
       >
-        {TAB_DEFS.map((tab) => (
-          <Tabs.Screen
-            key={tab.name}
-            name={tab.name}
-            options={{
-              title: t(tab.titleKey),
-              tabBarIcon: ({ focused, color }) => (
-                <Ionicons
-                  name={tab.icon}
-                  size={24}
-                  color={color}
-                />
-              ),
-            }}
-          />
-        ))}
+        {TAB_DEFS.map((tab) => {
+          // Check permissions for staff
+          let shouldShow = true;
+          if (activeStaff) {
+            if (tab.key === 'staff') {
+              shouldShow = false; // Hide Staff tab for Staff users
+            }
+          }
+
+          return (
+            <Tabs.Screen
+              key={tab.name}
+              name={tab.name}
+              options={{
+                title: t(tab.titleKey),
+                href: shouldShow ? undefined : null,
+                tabBarIcon: ({ focused, color }) => (
+                  <Ionicons
+                    name={tab.icon}
+                    size={24}
+                    color={color}
+                  />
+                ),
+              }}
+            />
+          );
+        })}
       </Tabs>
       <SyncToast />
     </>
