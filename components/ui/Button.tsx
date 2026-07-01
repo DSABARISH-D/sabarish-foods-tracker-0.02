@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, RADIUS, SPACING, SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -43,7 +42,7 @@ export function Button({
   const { colors } = useTheme();
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     onPress();
   };
 

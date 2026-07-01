@@ -42,8 +42,23 @@ import {
   updateKadan,
   deleteKadan,
   markKadanPaid,
+  updateExpensePaymentStatus,
+  updateInventoryStockFull,
+  fetchDailyTotalsForSync,
 } from '@/services/supabase.service';
-import { syncSaleToSheets, syncExpenseToSheets } from '@/services/sheets.service';
+import {
+  gsSyncDailyTotals,
+  initGoogleSheetSync,
+  startNetworkMonitor,
+  stopNetworkMonitor,
+  subscribeSyncState,
+  getSyncState,
+  processQueue,
+  checkConnection,
+  clearQueue,
+  type SyncState,
+  type ConnectionStatus,
+} from '@/services/googleSheet.service';
 import { getTodayDate } from '@/lib/utils';
 
 // ── Sync Status Type ──────────────────────────────────────────────────
@@ -150,13 +165,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             // Insert default owner permissions
             await supabase.from('permissions').insert({
               user_id: newOwner.id,
-              can_view_home: true,
-              can_manage_expenses: true,
-              can_manage_inventory: true,
-              can_manage_credit: true,
-              can_view_reports: true,
-              can_manage_staff: true,
-              can_manage_settings: true,
+              dashboard: true,
+              expenses: true,
+              inventory: true,
+              credit: true,
+              reports: true,
+              settings: true,
             });
           }
         }
@@ -264,19 +278,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         const { data: permsData } = await supabase
           .from('permissions')
           .select('*')
-          .eq('user_id', loggedUser.id)
+          .eq('staff_id', loggedUser.id)
           .single();
         if (permsData) {
           permissions = {
             id: permsData.id,
-            staff_id: permsData.user_id,
-            owner_id: permsData.user_id,
-            dashboard: permsData.can_view_home,
-            expenses: permsData.can_manage_expenses,
-            inventory: permsData.can_manage_inventory,
-            credit: permsData.can_manage_credit,
-            reports: permsData.can_view_reports,
-            settings: permsData.can_manage_settings,
+            staff_id: permsData.staff_id,
+            owner_id: permsData.owner_id,
+            dashboard: permsData.dashboard,
+            expenses: permsData.expenses,
+            inventory: permsData.inventory,
+            credit: permsData.credit,
+            reports: permsData.reports,
+            settings: permsData.settings,
             created_at: permsData.created_at,
             updated_at: permsData.updated_at,
           };
@@ -487,28 +501,82 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   },
 }));
 
-// ── Sync Store (global sync status) ──────────────────────────────────
+// ── Sync Store (Google Sheet sync status) ────────────────────────────
 interface SyncStore {
   syncStatus: SyncStatus;
+  connectionStatus: ConnectionStatus;
   syncError: string | null;
   lastSyncedAt: string | null;
+  pendingCount: number;
+  initialize: () => void;
   setSyncing: () => void;
   setSyncSuccess: () => void;
   setSyncError: (error: string) => void;
   resetSync: () => void;
+  checkGoogleSheetsConnection: () => Promise<{ connected: boolean; message: string }>;
+  retryPending: () => Promise<void>;
+  clearPending: () => Promise<void>;
+  destroy: () => void;
 }
 
-export const useSyncStore = create<SyncStore>((set) => ({
-  syncStatus: 'idle',
-  syncError: null,
-  lastSyncedAt: null,
+export const useSyncStore = create<SyncStore>((set, get) => {
+  let unsubscribeSyncState: (() => void) | null = null;
 
-  setSyncing: () => set({ syncStatus: 'syncing', syncError: null }),
-  setSyncSuccess: () =>
-    set({ syncStatus: 'success', syncError: null, lastSyncedAt: new Date().toISOString() }),
-  setSyncError: (error: string) => set({ syncStatus: 'error', syncError: error }),
-  resetSync: () => set({ syncStatus: 'idle', syncError: null }),
-}));
+  return {
+    syncStatus: 'idle',
+    connectionStatus: 'unconfigured',
+    syncError: null,
+    lastSyncedAt: null,
+    pendingCount: 0,
+
+    initialize: () => {
+      // Subscribe to sync state changes from the service
+      unsubscribeSyncState = subscribeSyncState((state: SyncState) => {
+        set({
+          connectionStatus: state.status,
+          lastSyncedAt: state.lastSyncTime,
+          pendingCount: state.pendingCount,
+          syncError: state.lastError,
+          syncStatus: state.status === 'syncing' ? 'syncing'
+            : state.status === 'connected' ? 'success'
+            : state.status === 'failed' ? 'error'
+            : 'idle',
+        });
+      });
+
+      // Initialize the service and start network monitoring
+      initGoogleSheetSync();
+      startNetworkMonitor();
+    },
+
+    destroy: () => {
+      if (unsubscribeSyncState) {
+        unsubscribeSyncState();
+        unsubscribeSyncState = null;
+      }
+      stopNetworkMonitor();
+    },
+
+    setSyncing: () => set({ syncStatus: 'syncing', syncError: null }),
+    setSyncSuccess: () =>
+      set({ syncStatus: 'success', syncError: null, lastSyncedAt: new Date().toISOString() }),
+    setSyncError: (error: string) => set({ syncStatus: 'error', syncError: error }),
+    resetSync: () => set({ syncStatus: 'idle', syncError: null }),
+
+    checkGoogleSheetsConnection: async () => {
+      return checkConnection();
+    },
+
+    retryPending: async () => {
+      await processQueue();
+    },
+
+    clearPending: async () => {
+      await clearQueue();
+      set({ pendingCount: 0 });
+    },
+  };
+});
 
 // ── Sales Store ───────────────────────────────────────────────────────
 interface SalesStore {
@@ -539,27 +607,66 @@ export const useSalesStore = create<SalesStore>((set) => ({
     const user = useAuthStore.getState().user;
     if (!user) return;
 
-    // 1. Save to Supabase
+    // 1. Save to Supabase (primary database)
     const sale = await insertSale(user.id, form);
     set((s) => ({ sales: [sale, ...s.sales] }));
     useDashboardStore.getState().loadStats();
 
-    // 2. Direct sync to Google Sheets
-    useSyncStore.getState().setSyncing();
-    const result = await syncSaleToSheets(sale);
-    if (result.success) {
-      useSyncStore.getState().setSyncSuccess();
-    } else {
-      useSyncStore.getState().setSyncError(result.error ?? 'Sheets sync failed');
-    }
+    // 2. Sync to Google Sheets via Apps Script (with offline queue)
+    fetchDailyTotalsForSync(user.id, getTodayDate()).then(totals => {
+      gsSyncDailyTotals(totals, getTodayDate(), 'CREATE').catch(() => {});
+    }).catch(console.error);
   },
 
   removeSale: async (id: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const sale = useSalesStore.getState().sales.find((x) => x.id === id);
+    if (sale) {
+      fetchDailyTotalsForSync(user.id, sale.date).then(totals => {
+        gsSyncDailyTotals(totals, sale.date, 'DELETE').catch(() => {});
+      }).catch(console.error);
+    }
+
     await deleteSale(id);
     set((s) => ({ sales: s.sales.filter((x) => x.id !== id) }));
     useDashboardStore.getState().loadStats();
   },
 }));
+
+function matchTrackedInventoryItem(purchaseItemName: string, inventoryList: any[]): string | null {
+  const name = purchaseItemName.toLowerCase().trim();
+  if (name === 'rice') return 'rice';
+  if (name === 'masala' || name === 'masalas') return 'masala';
+  if (name === 'chicken') return 'chicken';
+  if (name === 'cooking oil' || name === 'oil') return 'oil';
+  if (name === 'gas' || name === 'gas cylinder' || name === 'gas cylinders') return 'gas';
+  
+  const customMatch = inventoryList.find(i => i.item_name.toLowerCase() === name);
+  if (customMatch) return customMatch.item_name;
+  
+  return null;
+}
+
+function parsePurchaseItems(description?: string): { name: string, quantity: number }[] {
+  const items: { name: string, quantity: number }[] = [];
+  if (!description) return items;
+  const lines = description.split('\n');
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i].trim();
+    const nextLine = lines[i+1].trim();
+    if (nextLine.includes('×') || nextLine.includes('x')) {
+      const parts = nextLine.split(/[×x]/);
+      if (parts.length > 0) {
+        const qty = parseFloat(parts[0].trim()) || 0;
+        if (line && qty > 0) {
+          items.push({ name: line, quantity: qty });
+        }
+      }
+    }
+  }
+  return items;
+}
 
 // ── Expenses Store ────────────────────────────────────────────────────
 interface ExpensesStore {
@@ -568,9 +675,10 @@ interface ExpensesStore {
   isDayLocked: boolean;
   loadExpenses: (date?: string) => Promise<void>;
   checkDayLocked: (date: string) => Promise<void>;
-  addExpense: (form: ExpenseForm) => Promise<void>;
+  addExpense: (form: ExpenseForm, items?: any[]) => Promise<void>;
   removeExpense: (id: string) => Promise<void>;
   lockDay: (date: string) => Promise<void>;
+  markExpensePaid: (id: string) => Promise<void>;
 }
 
 export const useExpensesStore = create<ExpensesStore>((set) => ({
@@ -594,29 +702,143 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     set({ isDayLocked: false });
   },
 
-  addExpense: async (form: ExpenseForm) => {
+  addExpense: async (form: ExpenseForm, items?: any[]) => {
     const user = useAuthStore.getState().user;
     if (!user) return;
 
-    // 1. Save to Supabase
+    // 1. Save to Supabase (primary database)
     const expense = await insertExpense(user.id, form);
     set((s) => ({ expenses: [expense, ...s.expenses] }));
     useDashboardStore.getState().loadStats();
 
-    // 2. Direct sync to Google Sheets
-    useSyncStore.getState().setSyncing();
-    const result = await syncExpenseToSheets(expense);
-    if (result.success) {
-      useSyncStore.getState().setSyncSuccess();
-    } else {
-      useSyncStore.getState().setSyncError(result.error ?? 'Sheets sync failed');
+    // 2. Sync to Google Sheets via Apps Script (with offline queue)
+    fetchDailyTotalsForSync(user.id, form.date).then(totals => {
+      gsSyncDailyTotals(totals, form.date, 'CREATE').catch(() => {});
+    }).catch(console.error);
+
+    // 3. Update Inventory automatically
+    try {
+      let inventoryList = useInventoryStore.getState().inventory;
+      if (inventoryList.length === 0) {
+        await useInventoryStore.getState().loadInventory();
+        inventoryList = useInventoryStore.getState().inventory;
+      }
+
+      if (expense.category === 'chicken_cost' && expense.chicken_kg) {
+        await updateInventoryStockFull(
+          user.id,
+          'chicken',
+          Number(expense.chicken_kg),
+          Number(expense.chicken_price_per_kg || 0),
+          expense.payment_status || 'Paid',
+          expense.date
+        );
+      } else if (expense.category === 'gas_cylinder') {
+        await updateInventoryStockFull(
+          user.id,
+          'gas',
+          1,
+          expense.amount,
+          expense.payment_status || 'Paid',
+          expense.date
+        );
+      } else if (expense.category === 'store_purchases' && items) {
+        for (const item of items) {
+          const matchedName = matchTrackedInventoryItem(item.name, inventoryList);
+          if (matchedName) {
+            const qty = parseFloat(item.quantity) || 0;
+            const price = parseFloat(item.price) || 0;
+            const status = item.paymentStatus || 'Paid';
+            await updateInventoryStockFull(
+              user.id,
+              matchedName,
+              qty,
+              price,
+              status,
+              expense.date
+            );
+          }
+        }
+      }
+      
+      // Reload inventory store in the background
+      await useInventoryStore.getState().loadInventory();
+    } catch (err) {
+      console.error('Failed to auto-update inventory:', err);
     }
   },
 
   removeExpense: async (id: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+
+    // Find the expense to get details before deleting
+    const expense = useExpensesStore.getState().expenses.find((x) => x.id === id);
+
+    try {
+      if (expense) {
+        let inventoryList = useInventoryStore.getState().inventory;
+        if (inventoryList.length === 0) {
+          await useInventoryStore.getState().loadInventory();
+          inventoryList = useInventoryStore.getState().inventory;
+        }
+
+        if (expense.category === 'chicken_cost' && expense.chicken_kg) {
+          // Subtract the chicken kg
+          await updateInventoryStockFull(
+            user.id,
+            'chicken',
+            -Number(expense.chicken_kg),
+            Number(expense.chicken_price_per_kg || 0),
+            'Paid',
+            expense.date
+          );
+        } else if (expense.category === 'gas_cylinder') {
+          // Subtract 1 cylinder
+          await updateInventoryStockFull(
+            user.id,
+            'gas',
+            -1,
+            expense.amount,
+            'Paid',
+            expense.date
+          );
+        } else if (expense.category === 'store_purchases') {
+          // Parse the items from description
+          const items = parsePurchaseItems(expense.description);
+          for (const item of items) {
+            const matchedName = matchTrackedInventoryItem(item.name, inventoryList);
+            if (matchedName) {
+              const qty = item.quantity;
+              const invItem = inventoryList.find(i => i.item_name === matchedName);
+              await updateInventoryStockFull(
+                user.id,
+                matchedName,
+                -qty,
+                invItem?.last_purchase_price || 0,
+                invItem?.payment_status || 'Paid',
+                expense.date
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update inventory on expense deletion:', err);
+    }
+
+    if (expense) {
+      fetchDailyTotalsForSync(user.id, expense.date).then(totals => {
+        gsSyncDailyTotals(totals, expense.date, 'DELETE').catch(() => {});
+      }).catch(console.error);
+    }
+
     await deleteExpense(id);
     set((s) => ({ expenses: s.expenses.filter((x) => x.id !== id) }));
     useDashboardStore.getState().loadStats();
+    
+    // Reload inventory immediately
+    await useInventoryStore.getState().loadInventory();
   },
 
   lockDay: async (date: string) => {
@@ -625,6 +847,68 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     await lockExpensesForDate(user.id, date);
     set({ isDayLocked: true });
     set((s) => ({ expenses: s.expenses.map((e) => ({ ...e, locked: true })) }));
+  },
+
+  markExpensePaid: async (id: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    
+    // Update local state first to be responsive
+    set((s) => ({
+      expenses: s.expenses.map((e) =>
+        e.id === id ? { ...e, payment_status: 'Paid', paid_date: getTodayDate() } : e
+      ),
+    }));
+
+    // Update in Supabase
+    await updateExpensePaymentStatus(id, 'Paid', getTodayDate());
+    useDashboardStore.getState().loadStats();
+
+    // Get the updated expense record
+    const expense = useExpensesStore.getState().expenses.find((e) => e.id === id);
+    if (expense) {
+      // Sync to Google Sheets: pass category, date, payment_status: 'Paid', but NO amount (avoid double counting)
+      fetchDailyTotalsForSync(user.id, expense.date).then(totals => {
+        gsSyncDailyTotals(totals, expense.date, 'UPDATE').catch(() => {});
+      }).catch(console.error);
+
+      // Update payment status in inventory if it is a tracked item
+      try {
+        let inventoryList = useInventoryStore.getState().inventory;
+        if (inventoryList.length === 0) {
+          await useInventoryStore.getState().loadInventory();
+          inventoryList = useInventoryStore.getState().inventory;
+        }
+
+        let matchedName: string | null = null;
+        if (expense.description) {
+          if (expense.description.toLowerCase().includes('rice')) {
+            matchedName = 'rice';
+          } else {
+            for (const item of inventoryList) {
+              if (expense.description.toLowerCase().includes(item.item_name.toLowerCase())) {
+                matchedName = item.item_name;
+                break;
+              }
+            }
+          }
+        }
+        if (matchedName) {
+          const invItem = inventoryList.find(i => i.item_name === matchedName);
+          await updateInventoryStockFull(
+            user.id,
+            matchedName,
+            0,
+            invItem?.last_purchase_price || 0,
+            'Paid',
+            expense.date
+          );
+          await useInventoryStore.getState().loadInventory();
+        }
+      } catch (err) {
+        console.error('Failed to update inventory payment status:', err);
+      }
+    }
   },
 }));
 
@@ -660,6 +944,11 @@ export const useKadanStore = create<KadanStore>((set) => ({
     if (!user) return;
     const kadan = await insertKadan(user.id, form);
     set((s) => ({ kadanList: [kadan, ...s.kadanList] }));
+
+    // Sync credit (kadan) to Google Sheets
+    fetchDailyTotalsForSync(user.id, getTodayDate()).then(totals => {
+      gsSyncDailyTotals(totals, getTodayDate(), 'CREATE').catch(() => {});
+    }).catch(console.error);
   },
 
   editKadan: async (id: string, updates: Partial<KadanForm>) => {
@@ -670,6 +959,15 @@ export const useKadanStore = create<KadanStore>((set) => ({
   },
 
   removeKadan: async (id: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const kadan = useKadanStore.getState().kadanList.find((k) => k.id === id);
+    if (kadan) {
+      const date = kadan.created_at ? kadan.created_at.split('T')[0] : getTodayDate();
+      fetchDailyTotalsForSync(user.id, date).then(totals => {
+        gsSyncDailyTotals(totals, date, 'DELETE').catch(() => {});
+      }).catch(console.error);
+    }
     await deleteKadan(id);
     set((s) => ({ kadanList: s.kadanList.filter((k) => k.id !== id) }));
   },
@@ -724,6 +1022,12 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
       const lowStockItems = inventory.filter((i) => i.quantity <= i.low_stock_threshold);
       return { inventory, lowStockItems };
     });
+
+    // Sync inventory to Google Sheets
+    const date = getTodayDate();
+    fetchDailyTotalsForSync(user.id, date).then(totals => {
+      gsSyncDailyTotals(totals, date, 'UPDATE').catch(() => {});
+    }).catch(console.error);
   },
 }));
 
@@ -759,6 +1063,12 @@ export const useCashStore = create<CashStore>((set) => ({
     // Refresh the cash store and dashboard stats for the specific date
     await useCashStore.getState().loadCash(date);
     await useDashboardStore.getState().loadStats(date);
+
+    // Sync cash balance to Google Sheets
+    const targetDate = date || getTodayDate();
+    fetchDailyTotalsForSync(user.id, targetDate).then(totals => {
+      gsSyncDailyTotals(totals, targetDate, 'UPDATE').catch(() => {});
+    }).catch(console.error);
   },
 }));
 

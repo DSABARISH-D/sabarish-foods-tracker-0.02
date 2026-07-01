@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useAuthStore, useUIStore, initUIPreferences } from '@/store';
+import { useAuthStore, useUIStore, useSyncStore, initUIPreferences } from '@/store';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { useTheme } from '@/hooks/useTheme';
@@ -19,6 +19,8 @@ export default function RootLayout() {
     const boot = async () => {
       await initUIPreferences();
       await initialize();
+      // Initialize Google Sheets sync (queue, network monitor)
+      useSyncStore.getState().initialize();
       await SplashScreen.hideAsync();
     };
     boot();

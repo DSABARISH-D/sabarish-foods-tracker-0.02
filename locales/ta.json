@@ -26,6 +26,7 @@
     "petty_cash": "பெட்டி பணம்",
     "cash_in_hand": "கையில் பணம்",
     "cash_in_bank": "UPI PAY",
+    "cash_expenses": "பண செலவுகள்",
     "daily_sales": "இன்றைய விற்பனை",
     "daily_expenses": "இன்றைய செலவு",
     "today_profit": "இன்றைய லாபம்",
@@ -115,7 +116,10 @@
     "status": {
       "ok": "நல்லது",
       "low": "குறைவாக உள்ளது",
-      "critical": "மிகவும் குறைவு"
+      "critical": "மிகவும் குறைவு",
+      "in_stock": "இருப்பில் உள்ளது",
+      "low_stock": "சரக்கு குறைவு",
+      "out_of_stock": "சரக்கு இல்லை"
     }
   },
   "reports": {

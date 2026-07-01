@@ -14,13 +14,11 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { useAuthStore, useUIStore } from '@/store';
+import { useAuthStore, useUIStore, useSyncStore } from '@/store';
 import { COLORS, SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { verifySheetsConnection, VerifyResult } from '@/services/sheets.service';
 import { changeUserMpin } from '@/services/staff.service';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -29,11 +27,20 @@ import { Ionicons } from '@expo/vector-icons';
 export default function SettingsScreen() {
   const { user, activeStaff, switchStaff, logoutStaff, signOut } = useAuthStore();
   const { language, theme, setLanguage, setTheme } = useUIStore();
+  const {
+    connectionStatus,
+    lastSyncedAt,
+    pendingCount,
+    syncError,
+    initialize: initSync,
+    checkGoogleSheetsConnection,
+    retryPending,
+    clearPending,
+  } = useSyncStore();
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
 
   const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
 
   // Pinpad modal state
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -74,7 +81,7 @@ export default function SettingsScreen() {
     setChangingMpin(true);
     try {
       await changeUserMpin(targetUser.id, currentMpin, newMpin);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
       Alert.alert('Success', 'MPIN changed successfully.');
       setChangeMpinModalVisible(false);
     } catch (e: any) {
@@ -85,11 +92,12 @@ export default function SettingsScreen() {
   };
 
   useEffect(() => {
+    initSync();
     handleVerifySheets(true);
   }, []);
 
   const handleLogout = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     Alert.alert(
       t('settings.confirm_logout') || "Confirm Logout",
       t('settings.logout_message') || "Are you sure you want to log out?",
@@ -108,18 +116,47 @@ export default function SettingsScreen() {
   };
 
   const handleVerifySheets = async (silent = false) => {
-    if (!silent) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!silent) 
     setVerifying(true);
     try {
-      const result = await verifySheetsConnection();
-      setVerifyResult(result);
+      await checkGoogleSheetsConnection();
     } finally {
       setVerifying(false);
     }
   };
 
+  const handleRetrySync = async () => {
+    
+    await retryPending();
+  };
+
+  // Format last sync time for display
+  const formatLastSync = (isoStr: string | null): string => {
+    if (!isoStr) return 'Never';
+    const date = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin} min ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Connection status emoji and color
+  const getStatusIndicator = (): { emoji: string; color: string; label: string } => {
+    switch (connectionStatus) {
+      case 'connected': return { emoji: '🟢', color: '#22C55E', label: 'Connected' };
+      case 'syncing':   return { emoji: '🔄', color: '#F59E0B', label: 'Syncing...' };
+      case 'failed':    return { emoji: '🔴', color: '#EF4444', label: 'Failed' };
+      case 'offline':   return { emoji: '📡', color: '#94A3B8', label: 'Offline' };
+      default:          return { emoji: '⚪', color: '#94A3B8', label: 'Not Configured' };
+    }
+  };
+
   const handlePinPress = async (digit: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     setPinError('');
     if (pinText.length >= 4) return;
     
@@ -130,12 +167,12 @@ export default function SettingsScreen() {
       // Trigger verify
       const success = await switchStaff(newPin);
       if (success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
         setPinModalVisible(false);
         setPinText('');
         Alert.alert('Success', 'User profile updated');
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        
         setPinError('Invalid MPIN');
         setPinText('');
       }
@@ -143,7 +180,7 @@ export default function SettingsScreen() {
   };
 
   const handlePinBackspace = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     setPinText(pinText.slice(0, -1));
     setPinError('');
   };
@@ -226,7 +263,7 @@ export default function SettingsScreen() {
             <Switch
               value={isDark}
               onValueChange={async (v) => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                
                 await setTheme(v ? 'dark' : 'light');
               }}
               trackColor={{ false: '#E2E8F0', true: '#F97316' }}
@@ -281,7 +318,7 @@ export default function SettingsScreen() {
                     language === lang && { backgroundColor: '#F97316' },
                   ]}
                   onPress={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    
                     await setLanguage(lang);
                   }}
                 >
@@ -311,37 +348,95 @@ export default function SettingsScreen() {
               />
             </View>
 
-            {/* Integration */}
-            <SectionHeader title="Integration" />
+            {/* Integration — Google Sheets */}
+            <SectionHeader title="Google Sheets Sync" />
             <View style={[styles.card, SHADOW.sm]}>
+              {/* Connection Status Header */}
               <View style={styles.sheetsHeader}>
                 <View style={styles.sheetsTitleRow}>
                   <Ionicons name="document-text-outline" size={20} color="#64748B" style={{marginRight: 12}} />
-                  <View>
-                    <Text style={styles.rowLabel}>Google Sheets Connection</Text>
-                    {verifyResult && (
-                      <View style={styles.statusRow}>
-                        <View style={[styles.statusDot, { backgroundColor: verifyResult.connected ? '#22C55E' : '#EF4444' }]} />
-                        <Text style={[styles.statusText, { color: verifyResult.connected ? '#15803D' : '#B91C1C' }]}>
-                          {verifyResult.connected ? 'Connected' : 'Not Connected'}
-                        </Text>
-                      </View>
-                    )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowLabel}>Google Sheets</Text>
+                    <View style={styles.statusRow}>
+                      <Text style={{ fontSize: 14 }}>{getStatusIndicator().emoji}</Text>
+                      <Text style={[styles.statusText, { color: getStatusIndicator().color }]}>
+                        {getStatusIndicator().label}
+                      </Text>
+                    </View>
                   </View>
                 </View>
                 <TouchableOpacity 
-                  style={[styles.connectBtn, { backgroundColor: verifyResult?.connected ? '#F1F5F9' : '#F97316' }]}
+                  style={[styles.connectBtn, { backgroundColor: connectionStatus === 'connected' ? '#F1F5F9' : '#F97316' }]}
                   onPress={() => handleVerifySheets(false)}
                   disabled={verifying}
                 >
                   {verifying ? (
-                    <ActivityIndicator size="small" color={verifyResult?.connected ? '#F97316' : '#FFF'} />
+                    <ActivityIndicator size="small" color={connectionStatus === 'connected' ? '#F97316' : '#FFF'} />
                   ) : (
-                    <Text style={[styles.connectBtnText, { color: verifyResult?.connected ? '#F97316' : '#FFF' }]}>
-                      {verifyResult?.connected ? 'Reconnect' : 'Connect'}
+                    <Text style={[styles.connectBtnText, { color: connectionStatus === 'connected' ? '#F97316' : '#FFF' }]}>
+                      {connectionStatus === 'connected' ? 'Reconnect' : 'Connect'}
                     </Text>
                   )}
                 </TouchableOpacity>
+              </View>
+
+              {/* Sync Details */}
+              <View style={styles.divider} />
+              <View style={{ padding: 16, gap: 10 }}>
+                {/* Last Sync Time */}
+                <View style={styles.syncInfoRow}>
+                  <Ionicons name="time-outline" size={16} color="#94A3B8" />
+                  <Text style={styles.syncInfoLabel}>Last Sync</Text>
+                  <Text style={styles.syncInfoValue}>{formatLastSync(lastSyncedAt)}</Text>
+                </View>
+
+                {/* Pending Records */}
+                <View style={styles.syncInfoRow}>
+                  <Ionicons name="cloud-upload-outline" size={16} color="#94A3B8" />
+                  <Text style={styles.syncInfoLabel}>Pending</Text>
+                  <View style={[styles.pendingBadge, pendingCount > 0 && { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={[styles.pendingBadgeText, pendingCount > 0 && { color: '#D97706' }]}>
+                      {pendingCount} record{pendingCount !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Error message */}
+                {syncError && (
+                  <View style={styles.syncErrorBox}>
+                    <Ionicons name="warning-outline" size={14} color="#B91C1C" />
+                    <Text style={styles.syncErrorText} numberOfLines={2}>{syncError}</Text>
+                  </View>
+                )}
+
+                {/* Retry / Clear buttons */}
+                {pendingCount > 0 && (
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                    <TouchableOpacity
+                      style={[styles.syncActionBtn, { backgroundColor: '#F97316' }]}
+                      onPress={handleRetrySync}
+                    >
+                      <Ionicons name="refresh-outline" size={16} color="#FFF" />
+                      <Text style={[styles.syncActionBtnText, { color: '#FFF' }]}>Retry All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.syncActionBtn, { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Clear Pending',
+                          `Are you sure you want to clear ${pendingCount} pending sync records? This data will NOT be synced to Google Sheets.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Clear', style: 'destructive', onPress: clearPending },
+                          ]
+                        );
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#B91C1C" />
+                      <Text style={[styles.syncActionBtnText, { color: '#B91C1C' }]}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </View>
           </>
@@ -746,5 +841,61 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#0F172A',
+  },
+
+  // Google Sheets Sync Styles
+  syncInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncInfoLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    flex: 1,
+  },
+  syncInfoValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  pendingBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  syncErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  syncErrorText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    flex: 1,
+    lineHeight: 16,
+  },
+  syncActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  syncActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

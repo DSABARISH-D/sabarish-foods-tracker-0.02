@@ -2,7 +2,6 @@ import React from 'react';
 import { Tabs, useSegments, router } from 'expo-router';
 import { Platform, View, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, RADIUS, SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -46,7 +45,7 @@ export default function TabLayout() {
       }
 
       if (!isAllowed) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        
         router.replace('/tabs');
       }
     }

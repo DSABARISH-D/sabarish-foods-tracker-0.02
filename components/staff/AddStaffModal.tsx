@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput,
 import { Ionicons } from '@expo/vector-icons';
 import { SHADOW } from '@/constants/theme';
 import { Staff, StaffForm, StaffRole, StaffStatus } from '@/types';
+import { getLocalDateString } from '@/lib/utils';
 
 const ROLES: { key: StaffRole; label: string }[] = [
   { key: 'cook', label: 'Cook' }, { key: 'cashier', label: 'Cashier' },
@@ -42,7 +43,7 @@ export function AddStaffModal({ visible, onClose, onSave, editingStaff, isOwnerA
         role: isOwnerAccount ? 'owner' : role,
         mpin: mpin || '0000',
         monthly_salary: parseFloat(salary) || 0,
-        joining_date: editingStaff?.joining_date || new Date().toISOString().split('T')[0],
+        joining_date: editingStaff?.joining_date || getLocalDateString(),
         status,
       });
       onClose();

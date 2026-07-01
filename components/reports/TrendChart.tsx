@@ -31,10 +31,11 @@ export function TrendChart({ data, title, type = 'line', color = COLORS.primary 
     );
   }
 
-  const salesData = data.map((d) => ({ value: d.sales, label: d.label }));
-  const expData = data.map((d) => ({ value: d.expenses, label: d.label }));
-  const profitData = data.map((d) => ({ value: Math.max(0, d.profit), label: d.label }));
+  const safeValue = (val: any) => (Number.isFinite(Number(val)) ? Number(val) : 0);
 
+  const salesData = data.map((d) => ({ value: safeValue(d.totalSales), label: d.label || '' }));
+  const expData = data.map((d) => ({ value: safeValue(d.totalExpenses), label: d.label || '' }));
+  const profitData = data.map((d) => ({ value: Math.max(0, safeValue(d.totalProfit)), label: d.label || '' }));
   const chartProps = {
     width: CHART_WIDTH - 32,
     height: 180,
@@ -79,6 +80,10 @@ export function TrendChart({ data, title, type = 'line', color = COLORS.primary 
           color2={COLORS.secondary}
           startFillColor2={COLORS.secondary + '40'}
           endFillColor2={COLORS.secondary + '05'}
+          data3={expData}
+          color3={COLORS.gradients.purple[0]}
+          startFillColor3={COLORS.gradients.purple[0] + '40'}
+          endFillColor3={COLORS.gradients.purple[0] + '05'}
         />
       )}
     </View>

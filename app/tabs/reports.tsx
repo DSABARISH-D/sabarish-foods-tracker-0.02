@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -14,17 +15,16 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useInventoryStore, useExpensesStore } from '@/store';
 import { TrendChart } from '@/components/reports/TrendChart';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ListSkeleton } from '@/components/ui/Skeleton';
 import { SHADOW } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { ReportDataPoint } from '@/types';
-import { fetchDailyReportData, fetchExpensesByCategory } from '@/services/supabase.service';
-import { formatCurrency, EXPENSE_CATEGORY_EMOJIS } from '@/lib/utils';
+import { ReportDataPoint, Expense } from '@/types';
+import { fetchReportDataByDateRange, fetchExpensesByCategory, fetchExpenses } from '@/services/supabase.service';
+import { formatCurrency, EXPENSE_CATEGORY_EMOJIS, getLocalDateString } from '@/lib/utils';
 import { PieChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -35,12 +35,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_PAGE_WIDTH = SCREEN_WIDTH - 40; // 20px padding on each side
 
-type Period = 'daily' | 'weekly' | 'monthly';
+type Period = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const PERIOD_TABS: { key: Period; label: string }[] = [
   { key: 'daily', label: 'reports.daily' },
   { key: 'weekly', label: 'reports.weekly' },
   { key: 'monthly', label: 'reports.monthly' },
+  { key: 'yearly', label: 'reports.yearly' },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -58,12 +59,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 const FALLBACK_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD', '#D4A5A5', '#A8E6CF', '#FFD3B6', '#DCDCDC'];
 
 export default function ReportsScreen() {
-  const { user } = useAuthStore();
+  const { user, activeStaff } = useAuthStore();
   const { t } = useTranslation();
+  const { inventory, loadInventory } = useInventoryStore();
+  const { markExpensePaid } = useExpensesStore();
 
   const [period, setPeriod] = useState<Period>('daily');
   const [data, setData] = useState<ReportDataPoint[]>([]);
   const [categoryData, setCategoryData] = useState<{category: string, amount: number}[]>([]);
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -76,23 +80,93 @@ export default function ReportsScreen() {
     if (!user) return;
     setLoading(true);
     try {
-      const [rows, catRows] = await Promise.all([
-        fetchDailyReportData(user.id),
-        fetchExpensesByCategory(user.id, period)
+      const today = new Date();
+      // Reset to midnight for consistency
+      today.setHours(0, 0, 0, 0);
+      let startDate = new Date(today);
+      let endDate = new Date(today);
+
+      if (period === 'daily') {
+        // No change needed, startDate and endDate already set to today
+        endDate.setHours(23, 59, 59, 999);
+      } else if (period === 'weekly') {
+        // Monday to Sunday of current week
+        const day = startDate.getDay(); // 0 (Sun) - 6 (Sat)
+        const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
+        startDate = new Date(startDate.setDate(diff));
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+      } else if (period === 'monthly') {
+        // First day of month
+        startDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        // Last day of month
+        endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+      } else if (period === 'yearly') {
+        // First day of year
+        startDate = new Date(startDate.getFullYear(), 0, 1);
+        // Last day of year
+        endDate = new Date(startDate.getFullYear(), 11, 31);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+      }
+
+      const sd = getLocalDateString(startDate);
+      const ed = getLocalDateString(endDate);
+
+      const [rows, catRows, allExp] = await Promise.all([
+        fetchReportDataByDateRange(user.id, sd, ed),
+        fetchExpensesByCategory(user.id, sd, ed),
+        fetchExpenses(user.id),
+        loadInventory().catch(() => {}),
       ]);
-      setData(rows);
+
+      // If yearly, group by month
+      let finalRows = rows;
+      if (period === 'yearly') {
+        const monthlyData: Record<string, any> = {};
+        rows.forEach(r => {
+          const month = r.date.substring(0, 7); // YYYY-MM
+          if (!monthlyData[month]) {
+            monthlyData[month] = { ...r, label: month, date: month };
+          } else {
+            monthlyData[month].totalSales += r.totalSales;
+            monthlyData[month].totalExpenses += r.totalExpenses;
+            monthlyData[month].totalProfit += r.totalProfit;
+            monthlyData[month].cashSales += r.cashSales;
+            monthlyData[month].upiSales += r.upiSales;
+            monthlyData[month].cashExpenses += r.cashExpenses;
+            monthlyData[month].creditSales += r.creditSales;
+            monthlyData[month].inventoryPurchases += r.inventoryPurchases;
+          }
+        });
+        finalRows = Object.values(monthlyData).sort((a: any, b: any) => a.date.localeCompare(b.date));
+      }
+
+      setData(finalRows);
       setCategoryData(catRows);
+      setAllExpenses(allExp || []);
       setSelectedSlice(null);
       setSelectedSummarySlice(null);
     } catch {
       setData([]);
       setCategoryData([]);
+      setAllExpenses([]);
     } finally {
       setLoading(false);
     }
   }, [user, period]);
 
   useEffect(() => { loadData(); }, [period]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -108,52 +182,63 @@ export default function ReportsScreen() {
     }
   };
 
-  const totalSales = data.reduce((s, d) => s + d.sales, 0);
-  const totalExpenses = data.reduce((s, d) => s + d.expenses, 0);
+  const safeValue = (val: any) => (Number.isFinite(Number(val)) ? Number(val) : 0);
+
+  const totalSales = data.reduce((s, d) => s + safeValue(d.totalSales), 0);
+  const totalExpenses = data.reduce((s, d) => s + safeValue(d.totalExpenses), 0);
   const totalProfit = totalSales - totalExpenses;
   
-  const totalCategoryAmount = useMemo(() => categoryData.reduce((sum, item) => sum + item.amount, 0), [categoryData]);
+  const cashSales = data.reduce((s, d) => s + safeValue(d.cashSales), 0);
+  const upiSales = data.reduce((s, d) => s + safeValue(d.upiSales), 0);
+  const cashExpenses = data.reduce((s, d) => s + safeValue(d.cashExpenses), 0);
+  const creditSales = data.reduce((s, d) => s + safeValue(d.creditSales), 0);
+  const inventoryPurchases = data.reduce((s, d) => s + safeValue(d.inventoryPurchases), 0);
+  
+  const totalCategoryAmount = useMemo(() => categoryData.reduce((sum, item) => sum + safeValue(item.amount), 0), [categoryData]);
 
   const pieDataSummary = useMemo(() => {
-    const total = totalSales + totalExpenses + Math.max(0, totalProfit);
+    const total = safeValue(totalSales) + safeValue(totalExpenses) + Math.max(0, safeValue(totalProfit));
     if (total === 0) return [];
     
     return [
-      { value: totalSales, color: '#10B981', label: 'Sales' },
-      { value: totalExpenses, color: '#EF4444', label: 'Expenses' },
-      { value: Math.max(0, totalProfit), color: '#3B82F6', label: 'Profit' },
+      { value: safeValue(totalSales), color: '#10B981', label: 'Sales' },
+      { value: safeValue(totalExpenses), color: '#EF4444', label: 'Expenses' },
+      { value: Math.max(0, safeValue(totalProfit)), color: '#3B82F6', label: 'Profit' },
     ].filter(i => i.value > 0).map(i => ({
       ...i,
-      percent: (i.value / total) * 100,
+      percent: safeValue((i.value / total) * 100),
       text: '',
       onPress: () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setSelectedSummarySlice({ label: i.label, amount: i.value, percent: (i.value / total) * 100 });
+        setSelectedSummarySlice({ label: i.label, amount: i.value, percent: safeValue((i.value / total) * 100) });
       }
     }));
   }, [totalSales, totalExpenses, totalProfit]);
 
   const pieDataCategory = useMemo(() => {
-    return categoryData.map((item, index) => {
-      const percent = totalCategoryAmount > 0 ? (item.amount / totalCategoryAmount) * 100 : 0;
-      const color = CATEGORY_COLORS[item.category] || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
-      
-      return {
-        value: item.amount,
-        color,
-        category: item.category,
-        percent,
-        text: '',
-        onPress: () => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          setSelectedSlice({ category: item.category, amount: item.amount, percent });
-        }
-      };
+    return categoryData
+      .filter(item => safeValue(item.amount) > 0)
+      .map((item, index) => {
+        const val = safeValue(item.amount);
+        const percent = totalCategoryAmount > 0 ? safeValue((val / totalCategoryAmount) * 100) : 0;
+        const color = CATEGORY_COLORS[item.category] || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+        
+        return {
+          value: val,
+          color,
+          category: item.category,
+          percent,
+          text: '',
+          onPress: () => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setSelectedSlice({ category: item.category, amount: val, percent });
+          }
+        };
     });
   }, [categoryData, totalCategoryAmount]);
 
   const handleShare = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     const period_label = t(`reports.${period}`);
     const msg = `📊 *Sabarish Foods — ${period_label} Report*\n\n` +
       `📈 Total Sales: ${formatCurrency(totalSales)}\n` +
@@ -187,7 +272,7 @@ export default function ReportsScreen() {
                 period === tab.key && styles.tabActive,
               ]}
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setPeriod(tab.key);
               }}
@@ -244,6 +329,19 @@ export default function ReportsScreen() {
                 bg={totalProfit >= 0 ? '#DBEAFE' : '#FEE2E2'}
                 large
               />
+            </View>
+
+            {/* Detailed Stats */}
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <SummaryCard label="Cash Sales" value={cashSales} icon="cash-outline" color="#F59E0B" bg="#FEF3C7" />
+                <SummaryCard label="UPI Sales" value={upiSales} icon="qr-code-outline" color="#8B5CF6" bg="#EDE9FE" />
+              </View>
+              <View style={styles.summaryRow}>
+                <SummaryCard label="Cash Exp." value={cashExpenses} icon="wallet-outline" color="#F97316" bg="#FFEDD5" />
+                <SummaryCard label="Credit (Kadan)" value={creditSales} icon="time-outline" color="#6366F1" bg="#E0E7FF" />
+              </View>
+              <SummaryCard label="Inventory Purchases" value={inventoryPurchases} icon="cart-outline" color="#06B6D4" bg="#CFFAFE" />
             </View>
 
             {/* Swipeable Analytics Carousel */}
@@ -387,6 +485,228 @@ export default function ReportsScreen() {
                 ))}
               </View>
             </View>
+
+            {/* ── Pending Rice Payments Section ── */}
+            {(() => {
+              const pendingRiceExpenses = allExpenses.filter(
+                (e) => e.category === 'store_purchases' && 
+                       e.payment_status === 'Pending' && 
+                       e.description?.toLowerCase().includes('rice')
+              );
+              const totalPendingRiceAmount = pendingRiceExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+              const parseRiceDetailsLocal = (description?: string) => {
+                if (!description) return { quantity: 'N/A', price: 'N/A' };
+                const lines = description.split('\n');
+                const qtyLine = lines.find(l => l.includes('×') || l.toLowerCase().includes('kg'));
+                if (qtyLine) {
+                  const parts = qtyLine.split('×');
+                  const quantity = parts[0]?.trim() || 'N/A';
+                  const price = parts[1]?.trim() || 'N/A';
+                  return { quantity, price };
+                }
+                return { quantity: 'N/A', price: 'N/A' };
+              };
+
+              const handleMarkAsPaid = (expenseId: string, desc?: string) => {
+                const isOwner = !activeStaff;
+                if (!isOwner) return;
+                
+                Alert.alert(
+                  "Confirm Payment",
+                  `Mark "${desc?.split('\n')[0] || 'Rice'}" as Paid?`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Mark as Paid",
+                      onPress: async () => {
+                        try {
+                          await markExpensePaid(expenseId);
+                          
+                          loadData();
+                        } catch (err: any) {
+                          Alert.alert("Error", err.message || "Failed to update payment status.");
+                        }
+                      }
+                    }
+                  ]
+                );
+              };
+
+              return (
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.sectionTitle}>Pending Rice Payments</Text>
+                  
+                  {/* Total Pending Rice Card */}
+                  <View style={[styles.pendingTotalCard, SHADOW.sm]}>
+                    <View style={styles.pendingTotalLeft}>
+                      <View style={styles.pendingIconBox}>
+                        <Ionicons name="time" size={24} color="#D97706" />
+                      </View>
+                      <View>
+                        <Text style={styles.pendingTotalLabel}>Total Pending Rice Amount</Text>
+                        <Text style={styles.pendingTotalValue}>{formatCurrency(totalPendingRiceAmount)}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Pending Rice List Table */}
+                  <View style={[styles.reportTableCard, SHADOW.sm]}>
+                    {pendingRiceExpenses.length === 0 ? (
+                      <Text style={styles.noPendingText}>No pending rice payments</Text>
+                    ) : (
+                      <View>
+                        <View style={styles.tableHeaderRow}>
+                          <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Date</Text>
+                          <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Quantity</Text>
+                          <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Amount</Text>
+                          <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Action</Text>
+                        </View>
+                        {pendingRiceExpenses.map((exp) => {
+                          const { quantity } = parseRiceDetailsLocal(exp.description);
+                          const isOwner = !activeStaff;
+                          return (
+                            <View key={exp.id} style={styles.tableDataRow}>
+                              <Text style={[styles.tableDataCell, { flex: 1.2, fontSize: 13, fontWeight: '500' }]}>{exp.date}</Text>
+                              <Text style={[styles.tableDataCell, { flex: 1, fontSize: 13, fontWeight: '600', color: '#475569' }]}>{quantity}</Text>
+                              <Text style={[styles.tableDataCell, { flex: 1.2, fontSize: 13, fontWeight: '700', color: '#0F172A' }]}>{formatCurrency(exp.amount)}</Text>
+                              <View style={{ flex: 1, alignItems: 'center' }}>
+                                {isOwner ? (
+                                  <TouchableOpacity
+                                    style={styles.markPaidActionBtn}
+                                    onPress={() => handleMarkAsPaid(exp.id, exp.description)}
+                                  >
+                                    <Ionicons name="checkmark-done" size={16} color="#FFF" />
+                                  </TouchableOpacity>
+                                ) : (
+                                  <View style={styles.pendingBadgeLabel}>
+                                    <Text style={styles.pendingBadgeText}>Pending</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* ── Inventory Summary Section ── */}
+            {(() => {
+              const riceItem = inventory.find(i => i.item_name.toLowerCase().trim() === 'rice');
+              const chickenItem = inventory.find(i => i.item_name.toLowerCase().trim() === 'chicken');
+              const masalaItem = inventory.find(i => ['masala', 'masalas'].includes(i.item_name.toLowerCase().trim()));
+              const oilItem = inventory.find(i => ['oil', 'cooking oil'].includes(i.item_name.toLowerCase().trim()));
+              
+              const totalPendingAmount = allExpenses
+                .filter(e => e.payment_status === 'Pending')
+                .reduce((sum, e) => sum + e.amount, 0);
+
+              const lowStockItems = inventory.filter(i => {
+                const qty = Number(i.quantity) || 0;
+                const min = Number(i.low_stock_threshold) || 0;
+                return qty > 0 && qty <= min;
+              });
+
+              const outOfStockItems = inventory.filter(i => {
+                const qty = Number(i.quantity) || 0;
+                return qty <= 0;
+              });
+
+              return (
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.sectionTitle}>Inventory Summary</Text>
+                  
+                  {/* Metrics Grid */}
+                  <View style={styles.metricsGrid}>
+                    <View style={styles.metricItemRow}>
+                      <View style={styles.metricHalfCard}>
+                        <Ionicons name="pizza" size={20} color="#3B82F6" />
+                        <Text style={styles.metricCardLabel}>Rice Stock</Text>
+                        <Text style={styles.metricCardValue}>
+                          {riceItem ? `${riceItem.quantity} ${riceItem.unit}` : '0 kg'}
+                        </Text>
+                      </View>
+                      <View style={styles.metricHalfCard}>
+                        <Ionicons name="restaurant" size={20} color="#EF4444" />
+                        <Text style={styles.metricCardLabel}>Chicken Stock</Text>
+                        <Text style={styles.metricCardValue}>
+                          {chickenItem ? `${chickenItem.quantity} ${chickenItem.unit}` : '0 kg'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.metricItemRow}>
+                      <View style={styles.metricHalfCard}>
+                        <Ionicons name="flame" size={20} color="#F59E0B" />
+                        <Text style={styles.metricCardLabel}>Masala Stock</Text>
+                        <Text style={styles.metricCardValue}>
+                          {masalaItem ? `${masalaItem.quantity} ${masalaItem.unit}` : '0 kg'}
+                        </Text>
+                      </View>
+                      <View style={styles.metricHalfCard}>
+                        <Ionicons name="water" size={20} color="#10B981" />
+                        <Text style={styles.metricCardLabel}>Oil Stock</Text>
+                        <Text style={styles.metricCardValue}>
+                          {oilItem ? `${oilItem.quantity} ${oilItem.unit}` : '0 ltr'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Total Pending Purchase Amount Card */}
+                    <View style={[styles.pendingTotalCard, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5', marginTop: 0 }, SHADOW.sm]}>
+                      <View style={styles.pendingTotalLeft}>
+                        <View style={[styles.pendingIconBox, { backgroundColor: '#FCA5A5' }]}>
+                          <Ionicons name="alert-circle" size={24} color="#EF4444" />
+                        </View>
+                        <View>
+                          <Text style={[styles.pendingTotalLabel, { color: '#991B1B' }]}>Total Pending Purchase Amount</Text>
+                          <Text style={[styles.pendingTotalValue, { color: '#7F1D1D' }]}>{formatCurrency(totalPendingAmount)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Low / Out of stock lists */}
+                  <View style={[styles.reportTableCard, SHADOW.sm]}>
+                    <Text style={styles.listSubtitle}>Alerts & Statuses</Text>
+                    
+                    {/* Out of Stock Items */}
+                    <View style={{ marginBottom: 14 }}>
+                      <Text style={[styles.alertSubHeader, { color: '#EF4444' }]}>🔴 Out of Stock ({outOfStockItems.length})</Text>
+                      {outOfStockItems.length === 0 ? (
+                        <Text style={styles.noAlertsText}>No out of stock items</Text>
+                      ) : (
+                        outOfStockItems.map(item => (
+                          <View key={item.id} style={styles.alertRow}>
+                            <Text style={styles.alertItemName}>{t(`inventory.items.${item.item_name}`) || item.item_name}</Text>
+                            <Text style={[styles.alertItemQty, { color: '#EF4444' }]}>{item.quantity} {item.unit}</Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
+
+                    {/* Low Stock Items */}
+                    <View>
+                      <Text style={[styles.alertSubHeader, { color: '#F59E0B' }]}>🟡 Low Stock ({lowStockItems.length})</Text>
+                      {lowStockItems.length === 0 ? (
+                        <Text style={styles.noAlertsText}>No low stock items</Text>
+                      ) : (
+                        lowStockItems.map(item => (
+                          <View key={item.id} style={styles.alertRow}>
+                            <Text style={styles.alertItemName}>{t(`inventory.items.${item.item_name}`) || item.item_name}</Text>
+                            <Text style={[styles.alertItemQty, { color: '#D97706' }]}>{item.quantity} {item.unit}</Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
 
             {/* Export Section */}
             <TouchableOpacity
@@ -652,5 +972,168 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#0F172A',
+  },
+  sectionContainer: {
+    marginTop: 20,
+    marginHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  pendingTotalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF3C7', // light amber
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 12,
+  },
+  pendingTotalLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pendingIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingTotalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  pendingTotalValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#78350F',
+    marginTop: 2,
+  },
+  reportTableCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  noPendingText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontWeight: '500',
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 10,
+    marginBottom: 8,
+  },
+  tableHeaderCell: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  tableDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  tableDataCell: {
+    color: '#334155',
+  },
+  markPaidActionBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pendingBadgeLabel: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#D97706',
+    textTransform: 'uppercase',
+  },
+  metricsGrid: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  metricItemRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricHalfCard: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    gap: 6,
+  },
+  metricCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  metricCardValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  listSubtitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 8,
+  },
+  alertSubHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  noAlertsText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    paddingLeft: 6,
+    fontStyle: 'italic',
+  },
+  alertRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  alertItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  alertItemQty: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

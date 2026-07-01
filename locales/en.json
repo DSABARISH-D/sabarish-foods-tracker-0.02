@@ -23,6 +23,7 @@
     "petty_cash": "Petty Cash",
     "cash_in_hand": "Cash in Hand",
     "cash_in_bank": "UPI PAY",
+    "cash_expenses": "Cash Expenses",
     "daily_sales": "Today's Sales",
     "daily_expenses": "Today's Expenses",
     "today_profit": "Today's Profit",
@@ -112,7 +113,10 @@
     "status": {
       "ok": "OK",
       "low": "Low Stock",
-      "critical": "Critical"
+      "critical": "Critical",
+      "in_stock": "In Stock",
+      "low_stock": "Low Stock",
+      "out_of_stock": "Out of Stock"
     }
   },
   "reports": {

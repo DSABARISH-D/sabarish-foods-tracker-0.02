@@ -1,8 +1,15 @@
 import { ExpenseCategory, InventoryItem, KadanStatus, SaleCategory } from '@/types';
 
 // ── Date Utilities ─────────────────────────────────────────────────────
+export function getLocalDateString(date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0];
+  return getLocalDateString();
 }
 
 export function formatDate(dateStr: string, locale: 'ta' | 'en' = 'en'): string {
@@ -41,7 +48,7 @@ export function getWeekDates(): string[] {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+    dates.push(getLocalDateString(d));
   }
   return dates;
 }

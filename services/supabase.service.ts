@@ -11,7 +11,7 @@ import {
   SaleForm,
   User,
 } from '@/types';
-import { getTodayDate, getMonthStart } from '@/lib/utils';
+import { getTodayDate, getLocalDateString } from '@/lib/utils';
 
 // ── Auth ──────────────────────────────────────────────────────────────
 export async function signInWithEmail(email: string, password: string) {
@@ -71,20 +71,20 @@ export async function fetchDashboardStats(userId: string, targetDate?: string): 
   const todayExpenses = sumAmounts(expensesToday.data);
   const monthlyExpenses = sumAmounts(expensesMonth.data);
 
-  const cashData = cash.data as { petty_cash: number; cash_in_hand: number; cash_in_bank: number } | null;
+  const cashData = cash.data as { petty_cash: number; cash_in_hand: number; cash_in_bank: number; cash_expenses?: number } | null;
   const petty = Number(cashData?.petty_cash ?? 0);
   const hand = Number(cashData?.cash_in_hand ?? 0);
   const bank = Number(cashData?.cash_in_bank ?? 0);
+  const cashExp = Number(cashData?.cash_expenses ?? 0);
 
-  // New Formula: Sales = (Cash in Hand + Cash in Bank) - Petty Cash
-  // Note: If petty > hand+bank, sales will be negative.
-  const todaySales = (hand + bank) - petty;
+  // New Formula: Sales = (Cash in Hand + Cash in Bank + Cash Expenses) - Petty Cash
+  const todaySales = (hand + bank + cashExp) - petty;
 
   // Monthly sales would require fetching all cash_balance rows for the month and summing their daily sales.
   // To keep it simple, we'll fetch them here.
   const { data: monthCash } = await supabase
     .from('cash_balance')
-    .select('petty_cash, cash_in_hand, cash_in_bank')
+    .select('petty_cash, cash_in_hand, cash_in_bank, cash_expenses')
     .eq('user_id', userId)
     .gte('date', monthStart)
     .lte('date', date);
@@ -95,7 +95,8 @@ export async function fetchDashboardStats(userId: string, targetDate?: string): 
       const p = Number(row.petty_cash ?? 0);
       const h = Number(row.cash_in_hand ?? 0);
       const b = Number(row.cash_in_bank ?? 0);
-      return sum + ((h + b) - p);
+      const ce = Number(row.cash_expenses ?? 0);
+      return sum + ((h + b + ce) - p);
     }, 0);
   }
 
@@ -103,6 +104,7 @@ export async function fetchDashboardStats(userId: string, targetDate?: string): 
     petty_cash: petty,
     cash_in_hand: hand,
     cash_in_bank: bank,
+    cash_expenses: cashExp,
     today_sales: todaySales,
     today_expenses: todayExpenses,
     today_profit: todaySales - todayExpenses,
@@ -211,10 +213,94 @@ export async function upsertInventoryItem(
 ): Promise<void> {
   const { error } = await supabase
     .from('inventory')
-    .update({ quantity, last_updated: new Date().toISOString() })
+    .update({ 
+      quantity, 
+      current_stock: quantity,
+      last_updated: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
     .eq('user_id', userId)
     .eq('item_name', itemName);
   if (error) throw error;
+}
+
+export async function updateExpensePaymentStatus(
+  id: string,
+  paymentStatus: 'Paid' | 'Pending',
+  paidDate?: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from('expenses')
+    .update({
+      payment_status: paymentStatus,
+      paid_date: paidDate,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateInventoryStockFull(
+  userId: string,
+  itemName: string,
+  quantityToAdd: number,
+  lastPurchasePrice: number,
+  paymentStatus: 'Paid' | 'Pending',
+  date?: string
+): Promise<void> {
+  const { data: existing, error: fetchErr } = await supabase
+    .from('inventory')
+    .select('quantity, current_stock, unit, low_stock_threshold')
+    .eq('user_id', userId)
+    .eq('item_name', itemName)
+    .maybeSingle();
+    
+  if (fetchErr) throw fetchErr;
+  
+  const purchaseDate = date || getLocalDateString();
+  
+  if (existing) {
+    const newQty = Math.max(0, (Number(existing.quantity) || 0) + quantityToAdd);
+    const { error } = await supabase
+      .from('inventory')
+      .update({
+        quantity: newQty,
+        current_stock: newQty,
+        last_purchase_date: purchaseDate,
+        last_purchase_price: lastPurchasePrice,
+        payment_status: paymentStatus,
+        last_updated: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .eq('item_name', itemName);
+    if (error) throw error;
+  } else {
+    let unit = 'pcs';
+    const lowerName = itemName.toLowerCase();
+    if (lowerName.includes('oil')) unit = 'litres';
+    else if (lowerName.includes('rice') || lowerName.includes('chicken') || lowerName.includes('masala')) unit = 'kg';
+    else if (lowerName.includes('gas')) unit = 'cylinders';
+
+    const safeQty = Math.max(0, quantityToAdd);
+    const { error } = await supabase
+      .from('inventory')
+      .insert({
+        user_id: userId,
+        item_name: itemName,
+        quantity: safeQty,
+        current_stock: safeQty,
+        unit: unit,
+        low_stock_threshold: 5,
+        minimum_stock: 5,
+        last_purchase_date: purchaseDate,
+        last_purchase_price: lastPurchasePrice,
+        payment_status: paymentStatus,
+        last_updated: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    if (error) throw error;
+  }
 }
 
 // ── Cash Balance ──────────────────────────────────────────────────────
@@ -303,54 +389,92 @@ export async function markKadanPaid(id: string): Promise<void> {
 }
 
 // ── Reports Data ──────────────────────────────────────────────────────
-export async function fetchDailyReportData(userId: string) {
-  const dates = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+export async function fetchReportDataByDateRange(userId: string, startDate: string, endDate: string) {
+  // We need to fetch cash balances, kadan, and expenses within the range
+  const [cashRes, expRes, kadanRes] = await Promise.all([
+    supabase.from('cash_balance').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+    supabase.from('expenses').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
+    supabase.from('kadan').select('*').eq('user_id', userId).gte('created_at', startDate + 'T00:00:00').lte('created_at', endDate + 'T23:59:59')
+  ]);
+
+  const cashData = cashRes.data || [];
+  const expData = expRes.data || [];
+  const kadanData = kadanRes.data || [];
+
+  // Group by date
+  const dateMap: Record<string, any> = {};
+
+  // Initialize dates
+  let current = new Date(startDate);
+  const end = new Date(endDate);
+  while (current <= end) {
+    const dStr = getLocalDateString(current);
+    dateMap[dStr] = {
+      label: dStr.slice(5),
+      date: dStr,
+      totalSales: 0,
+      totalExpenses: 0,
+      totalProfit: 0,
+      cashSales: 0,
+      upiSales: 0,
+      cashExpenses: 0,
+      creditSales: 0,
+      inventoryPurchases: 0
+    };
+    current.setDate(current.getDate() + 1);
   }
 
-  const results = await Promise.all(
-    dates.map(async (date) => {
-      const [cashRes, expRes] = await Promise.all([
-        supabase.from('cash_balance').select('petty_cash, cash_in_hand, cash_in_bank').eq('user_id', userId).eq('date', date).maybeSingle(),
-        supabase.from('expenses').select('amount').eq('user_id', userId).eq('date', date),
-      ]);
+  cashData.forEach(row => {
+    const date = row.date;
+    if (dateMap[date]) {
+      const p = Number(row.petty_cash || 0);
+      const h = Number(row.cash_in_hand || 0);
+      const b = Number(row.cash_in_bank || 0);
+      const ce = Number(row.cash_expenses || 0);
       
-      const p = Number(cashRes.data?.petty_cash ?? 0);
-      const h = Number(cashRes.data?.cash_in_hand ?? 0);
-      const b = Number(cashRes.data?.cash_in_bank ?? 0);
-      const sales = (h + b) - p;
+      const sales = (h + b + ce) - p;
+      dateMap[date].totalSales = sales > 0 ? sales : 0;
+      dateMap[date].cashSales = (h + ce) - p > 0 ? (h + ce) - p : 0;
+      dateMap[date].upiSales = b;
+      dateMap[date].cashExpenses = ce;
+    }
+  });
 
-      const expenses = (expRes.data ?? []).reduce((s, r) => s + Number(r.amount), 0);
+  expData.forEach(row => {
+    const date = row.date;
+    if (dateMap[date]) {
+      const amount = Number(row.amount || 0);
+      dateMap[date].totalExpenses += amount;
       
-      return { 
-        label: date.slice(5), 
-        sales: sales > 0 ? sales : 0, 
-        expenses, 
-        profit: sales - expenses 
-      };
-    })
-  );
+      // Calculate inventory purchases (market, store, chicken)
+      if (['market_purchases', 'store_purchases', 'chicken_cost'].includes(row.category)) {
+        dateMap[date].inventoryPurchases += amount;
+      }
+    }
+  });
 
-  return results;
+  kadanData.forEach(row => {
+    const date = (row.created_at || row.updated_at || new Date().toISOString()).split('T')[0];
+    if (dateMap[date]) {
+      dateMap[date].creditSales += Number(row.amount || 0);
+    }
+  });
+
+  // Calculate profit
+  Object.values(dateMap).forEach(d => {
+    d.totalProfit = d.totalSales - d.totalExpenses;
+  });
+
+  return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function fetchExpensesByCategory(userId: string, period: 'daily' | 'weekly' | 'monthly') {
-  let days = 0;
-  if (period === 'weekly') days = 7;
-  else if (period === 'monthly') days = 30;
-  
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  const startDate = d.toISOString().split('T')[0];
-
+export async function fetchExpensesByCategory(userId: string, startDate: string, endDate: string) {
   const { data, error } = await supabase
     .from('expenses')
     .select('category, amount')
     .eq('user_id', userId)
-    .gte('date', startDate);
+    .gte('date', startDate)
+    .lte('date', endDate);
 
   if (error || !data) return [];
 
@@ -368,4 +492,95 @@ export async function fetchExpensesByCategory(userId: string, period: 'daily' | 
 export async function markSyncedToSheets(table: 'sales' | 'expenses', id: string): Promise<void> {
   const { error } = await supabase.from(table).update({ synced_to_sheets: true }).eq('id', id);
   if (error) throw error;
+}
+
+// ── Daily Totals for Google Sheets Sync ────────────────────────────────
+export async function fetchDailyTotalsForSync(userId: string, date: string) {
+  // Fetch Expenses
+  const { data: expenses } = await supabase.from('expenses').select('*').eq('user_id', userId).eq('date', date);
+  // Fetch Sales
+  const { data: sales } = await supabase.from('sales').select('*').eq('user_id', userId).eq('date', date);
+  // Fetch Cash Balance
+  const { data: cash } = await supabase.from('cash_balance').select('*').eq('user_id', userId).eq('date', date).maybeSingle();
+  // Fetch Kadan (Credit)
+  // Kadan table doesn't have a date column, it uses created_at. We'll filter by date prefix.
+  const { data: kadan } = await supabase.from('kadan').select('*').eq('user_id', userId).gte('created_at', `${date}T00:00:00`).lte('created_at', `${date}T23:59:59`);
+  // Fetch Inventory (for daily status like Rice/Gas)
+  const { data: inventory } = await supabase.from('inventory').select('*').eq('user_id', userId);
+
+  const totals: any = {
+    chicken_cost: 0,
+    chicken_kg: 0,
+    grocery: 0,
+    indian_market: 0,
+    store_purchase: 0,
+    staff_salary: 0,
+    gas: 0,
+    electricity: 0,
+    water_supply: 0,
+    transport: 0,
+    other_expenses: 0,
+    cash_expenses: 0,
+    cash_in_hand: 0,
+    upi: 0,
+    credit: 0
+  };
+
+  // 1. Process Expenses
+  if (expenses) {
+    expenses.forEach((e: any) => {
+      const cat = e.category === 'market_purchases' ? 'grocery' :
+                  e.category === 'store_purchases' ? 'store_purchase' :
+                  e.category === 'staff' ? 'staff_salary' :
+                  e.category === 'gas_cylinder' ? 'gas' :
+                  e.category === 'other' ? 'other_expenses' :
+                  e.category;
+      
+      if (totals[cat] !== undefined) {
+        totals[cat] += Number(e.amount || 0);
+      }
+      if (e.category === 'chicken_cost' && e.chicken_kg) {
+        totals.chicken_kg += Number(e.chicken_kg || 0);
+      }
+      
+      // Store rice/gas payment status into notes
+      if (e.payment_status && (cat === 'grocery' || cat === 'gas')) {
+        const existingNotes = totals.notes || '';
+        totals.notes = existingNotes ? `${existingNotes}, Payment: ${e.payment_status}` : `Payment: ${e.payment_status}`;
+      }
+    });
+  }
+
+  // 2. Process Sales
+  if (sales) {
+    sales.forEach((s: any) => {
+      if (s.payment_method === 'cash') totals.cash_in_hand += Number(s.amount || 0);
+      if (s.payment_method === 'upi') totals.upi += Number(s.amount || 0);
+      if (s.payment_method === 'credit') totals.credit += Number(s.amount || 0);
+    });
+  }
+
+  // 3. Process Cash Balance (Overrides sales if present, as cash balance is the single source of truth for dashboard)
+  if (cash) {
+    totals.cash_in_hand = Math.max(totals.cash_in_hand, Number(cash.cash_in_hand || 0));
+    totals.upi = Math.max(totals.upi, Number(cash.cash_in_bank || 0)); // map cash_in_bank to upi
+    totals.cash_expenses = Number(cash.cash_expenses || 0);
+  }
+
+  // 4. Process Kadan (Credit)
+  if (kadan) {
+    kadan.forEach((k: any) => {
+      totals.credit += Number(k.amount || 0);
+    });
+  }
+
+  // 5. Process Inventory Status
+  if (inventory) {
+    const rice = inventory.find((i: any) => i.item_name.toLowerCase().includes('rice'));
+    const gas = inventory.find((i: any) => i.item_name.toLowerCase().includes('gas'));
+    if (rice) totals.rice_status = `${rice.quantity} ${rice.unit}`;
+    if (gas) totals.gas_status = `${gas.quantity} ${gas.unit}`;
+  }
+
+  return totals;
 }

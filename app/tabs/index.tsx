@@ -17,13 +17,14 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { DashboardSkeleton } from '@/components/ui/Skeleton';
 import { SHADOW } from '@/constants/theme';
+import { getTodayDate, getLocalDateString } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Ionicons } from '@expo/vector-icons';
 import { TrendChart } from '@/components/reports/TrendChart';
-import { fetchDailyReportData } from '@/services/supabase.service';
+import { fetchReportDataByDateRange } from '@/services/supabase.service';
 import { ReportDataPoint } from '@/types';
-
+import { useFocusEffect } from 'expo-router';
 export default function DashboardScreen() {
   const { user, activeStaff, activePermissions } = useAuthStore();
   const { stats, statsLoading, loadStats } = useDashboardStore();
@@ -38,14 +39,19 @@ export default function DashboardScreen() {
   const [chartData, setChartData] = useState<ReportDataPoint[]>([]);
 
   // Cash Edit State
-  const [editingField, setEditingField] = useState<'petty' | 'hand' | 'bank' | null>(null);
+  const [editingField, setEditingField] = useState<'petty' | 'hand' | 'bank' | 'expenses' | null>(null);
   const [editPetty, setEditPetty] = useState('');
   const [editHand, setEditHand] = useState('');
   const [editBank, setEditBank] = useState('');
+  const [editExpenses, setEditExpenses] = useState('');
   const [updatingCash, setUpdatingCash] = useState(false);
 
   const load = useCallback(async () => {
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(selectedDate);
+    
+    // Optimistically clear data to avoid flashing stale charts during fetch
+    setChartData([]);
+    
     await Promise.all([
       loadStats(dateStr), 
       loadInventory(), 
@@ -55,7 +61,10 @@ export default function DashboardScreen() {
     
     if (user) {
       try {
-        const data = await fetchDailyReportData(user.id);
+        const sd = new Date(selectedDate);
+        sd.setDate(sd.getDate() - 6);
+        const startDateStr = getLocalDateString(sd);
+        const data = await fetchReportDataByDateRange(user.id, startDateStr, dateStr);
         setChartData(data);
       } catch (e) {
         setChartData([]);
@@ -63,7 +72,11 @@ export default function DashboardScreen() {
     }
   }, [selectedDate, user]);
 
-  useEffect(() => { load(); }, [selectedDate]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -72,27 +85,30 @@ export default function DashboardScreen() {
   };
 
   const s = stats ?? {
-    petty_cash: 0, cash_in_hand: 0, cash_in_bank: 0,
+    petty_cash: 0, cash_in_hand: 0, cash_in_bank: 0, cash_expenses: 0,
     today_sales: 0, today_expenses: 0, today_profit: 0,
     monthly_sales: 0, monthly_expenses: 0, monthly_profit: 0,
   };
 
-  const handleOpenEditCash = (field: 'petty' | 'hand' | 'bank') => {
+  const handleOpenEditCash = (field: 'petty' | 'hand' | 'bank' | 'expenses') => {
     setEditPetty(s.petty_cash ? s.petty_cash.toString() : '');
     setEditHand(s.cash_in_hand ? s.cash_in_hand.toString() : '');
     setEditBank(s.cash_in_bank ? s.cash_in_bank.toString() : '');
+    setEditExpenses(s.cash_expenses ? s.cash_expenses.toString() : '');
     setEditingField(field);
   };
 
   const handleUpdateCash = async () => {
     setUpdatingCash(true);
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateString(selectedDate);
     try {
       await updateCash({
         petty_cash: parseFloat(editPetty) || 0,
         cash_in_hand: parseFloat(editHand) || 0,
         cash_in_bank: parseFloat(editBank) || 0,
+        cash_expenses: parseFloat(editExpenses) || 0,
       }, dateStr);
+      await load(); // Also refresh the graph when cash changes
       setEditingField(null);
     } finally {
       setUpdatingCash(false);
@@ -146,10 +162,15 @@ export default function DashboardScreen() {
         ) : (
           <>
             {/* Cash Section */}
-            <View style={styles.cashRow}>
-              <CashCard label={t('dashboard.petty_cash') || "Petty Cash"} value={s.petty_cash} icon="wallet-outline" onPress={() => handleOpenEditCash('petty')} />
-              <CashCard label={t('dashboard.cash_in_hand') || "Cash in Hand"} value={s.cash_in_hand} icon="cash-outline" onPress={() => handleOpenEditCash('hand')} />
-              <CashCard label={t('dashboard.cash_in_bank') || "UPI PAY"} value={s.cash_in_bank} icon="card-outline" onPress={() => handleOpenEditCash('bank')} />
+            <View style={styles.cashGrid}>
+              <View style={styles.cashRow}>
+                <CashCard label={t('dashboard.petty_cash') || "Petty Cash"} value={s.petty_cash} icon="wallet-outline" onPress={() => handleOpenEditCash('petty')} />
+                <CashCard label={t('dashboard.cash_in_hand') || "Cash in Hand"} value={s.cash_in_hand} icon="cash-outline" onPress={() => handleOpenEditCash('hand')} />
+              </View>
+              <View style={styles.cashRow}>
+                <CashCard label={t('dashboard.cash_in_bank') || "UPI PAY"} value={s.cash_in_bank} icon="card-outline" onPress={() => handleOpenEditCash('bank')} />
+                <CashCard label={t('dashboard.cash_expenses') || "Cash Expenses"} value={s.cash_expenses || 0} icon="document-text-outline" onPress={() => handleOpenEditCash('expenses')} />
+              </View>
             </View>
 
             {/* Today's Stats */}
@@ -188,16 +209,14 @@ export default function DashboardScreen() {
             </View>
 
             {/* Sales Analytics Chart */}
-            {chartData.length > 0 && (
-              <View style={{ marginTop: 8 }}>
-                <TrendChart
-                  data={chartData}
-                  title="Sales Analytics"
-                  type="line"
-                  color="#F97316"
-                />
-              </View>
-            )}
+            <View style={{ marginTop: 8 }}>
+              <TrendChart
+                data={chartData}
+                title="Sales Analytics"
+                type="line"
+                color="#F97316"
+              />
+            </View>
 
             <View style={{ height: 20 }} />
           </>
@@ -210,7 +229,8 @@ export default function DashboardScreen() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
               Edit {editingField === 'petty' ? 'Petty Cash' :
-                     editingField === 'hand' ? 'Cash in Hand' : 'UPI PAY'}
+                     editingField === 'hand' ? 'Cash in Hand' :
+                     editingField === 'bank' ? 'UPI PAY' : 'Cash Expenses'}
             </Text>
             <TouchableOpacity onPress={() => setEditingField(null)}>
               <Ionicons name="close" size={24} color="#0F172A" />
@@ -227,6 +247,9 @@ export default function DashboardScreen() {
                 )}
                 {editingField === 'bank' && (
                   <Input label="UPI PAY" value={editBank} onChangeText={setEditBank} keyboardType="numeric" placeholder="Enter amount" autoFocus />
+                )}
+                {editingField === 'expenses' && (
+                  <Input label="Cash Expenses" value={editExpenses} onChangeText={setEditExpenses} keyboardType="numeric" placeholder="Enter amount" autoFocus />
                 )}
                 <Button
                   title={updatingCash ? "Saving..." : "Save"}
@@ -286,6 +309,9 @@ const styles = StyleSheet.create({
     color: '#F97316',
   },
 
+  cashGrid: {
+    gap: 12,
+  },
   cashRow: {
     flexDirection: 'row',
     gap: 12,

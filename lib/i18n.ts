@@ -1,22 +1,31 @@
-import { I18n } from 'i18n-js';
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
 import * as Localization from 'expo-localization';
 
 // Import translations
 import ta from '@/locales/ta.json';
 import en from '@/locales/en.json';
 
-export const i18n = new I18n({
-  ta,
-  en,
-});
+const resources = {
+  ta: { translation: ta },
+  en: { translation: en },
+};
 
-// Default language is Tamil
-i18n.locale = 'ta';
-i18n.enableFallback = true;
-i18n.defaultLocale = 'ta';
+i18n
+  .use(initReactI18next)
+  .init({
+    resources,
+    lng: 'ta', // Default language is Tamil
+    fallbackLng: 'ta',
+    interpolation: {
+      escapeValue: false, // react already safes from xss
+    },
+  });
+
+export { i18n };
 
 export function setLocale(locale: 'ta' | 'en') {
-  i18n.locale = locale;
+  i18n.changeLanguage(locale);
 }
 
 export function t(key: string, params?: Record<string, string | number>): string {

@@ -21,7 +21,7 @@ export type StaffRole = 'cook' | 'cashier' | 'server' | 'delivery' | 'cleaner' |
 export type StaffStatus = 'active' | 'inactive';
 export type KadanStatus = 'pending' | 'paid' | 'overdue';
 export type InventoryItem = 'chicken' | 'oil' | 'masala' | 'rice' | 'gas' | 'other';
-export type ReportPeriod = 'daily' | 'weekly' | 'monthly';
+export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 // ── User ──────────────────────────────────────────────────────────────
 export interface User {
@@ -67,6 +67,8 @@ export interface Expense {
   chicken_price_per_kg?: number;
   locked: boolean;
   synced_to_sheets: boolean;
+  payment_status: 'Paid' | 'Pending';
+  paid_date?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +80,8 @@ export interface ExpenseForm {
   date: string;
   chicken_kg?: number;
   chicken_price_per_kg?: number;
+  payment_status?: 'Paid' | 'Pending';
+  paid_date?: string | null;
 }
 
 // ── Staff ─────────────────────────────────────────────────────────────
@@ -168,6 +172,11 @@ export interface InventoryRecord {
   unit: string;
   low_stock_threshold: number;
   last_updated: string;
+  current_stock?: number | null;
+  minimum_stock?: number | null;
+  last_purchase_date?: string | null;
+  last_purchase_price?: number | null;
+  payment_status?: 'Paid' | 'Pending';
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +188,7 @@ export interface CashBalance {
   petty_cash: number;
   cash_in_hand: number;
   cash_in_bank: number;
+  cash_expenses?: number;
   last_updated: string;
   created_at: string;
   updated_at: string;
@@ -188,6 +198,7 @@ export interface CashBalanceUpdate {
   petty_cash?: number;
   cash_in_hand?: number;
   cash_in_bank?: number;
+  cash_expenses?: number;
 }
 
 // ── Kadan (Credit) ────────────────────────────────────────────────────
@@ -218,6 +229,7 @@ export interface DashboardStats {
   petty_cash: number;
   cash_in_hand: number;
   cash_in_bank: number;
+  cash_expenses?: number;
   today_sales: number;
   today_expenses: number;
   today_profit: number;
@@ -229,9 +241,15 @@ export interface DashboardStats {
 // ── Report ────────────────────────────────────────────────────────────
 export interface ReportDataPoint {
   label: string;
-  sales: number;
-  expenses: number;
-  profit: number;
+  date: string;
+  totalSales: number;
+  totalExpenses: number;
+  totalProfit: number;
+  cashSales: number;
+  upiSales: number;
+  cashExpenses: number;
+  creditSales: number;
+  inventoryPurchases: number;
 }
 
 export interface ExpenseCategoryBreakdown {

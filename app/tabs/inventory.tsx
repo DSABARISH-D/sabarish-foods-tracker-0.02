@@ -12,7 +12,6 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { useInventoryStore, useAuthStore } from '@/store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -62,7 +61,7 @@ export default function InventoryScreen() {
     setUpdating(true);
     try {
       await updateStock(selectedItem.id, qty);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
       setSelectedItem(null);
       setNewQty('');
     } finally {
@@ -99,7 +98,7 @@ export default function InventoryScreen() {
       if (error) throw error;
       
       await loadInventory();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
       Alert.alert('Success', 'Inventory item added successfully.');
       setShowCreateModal(false);
       setNewItemForm({ itemName: '', unit: '', currentStock: '', minStock: '' });
@@ -110,24 +109,63 @@ export default function InventoryScreen() {
     }
   };
 
-  const getStockStatus = (item: InventoryRecord): 'ok' | 'low' | 'critical' => {
-    const ratio = item.quantity / item.low_stock_threshold;
-    if (ratio > 1.5) return 'ok';
-    if (ratio > 0) return 'low';
-    return 'critical';
+  const isTrackedItem = (name: string): boolean => {
+    const n = name.toLowerCase().trim();
+    return ['rice', 'chicken', 'cooking oil', 'masalas', 'gas cylinder', 'oil', 'masala', 'gas'].includes(n);
   };
 
-  const getStatusStyle = (status: 'ok' | 'low' | 'critical') => {
+  const getItemUnit = (item: InventoryRecord): string => {
+    const name = item.item_name.toLowerCase().trim();
+    if (name === 'rice') return 'kg';
+    if (name === 'chicken') return 'kg';
+    if (name === 'masala' || name === 'masalas') return 'kg';
+    if (name === 'oil' || name === 'cooking oil') return 'litres';
+    if (name === 'gas' || name === 'gas cylinder' || name === 'gas cylinders') return 'cylinders';
+    return item.unit || 'pcs';
+  };
+
+  const getStockStatus = (item: InventoryRecord): 'in_stock' | 'low_stock' | 'out_of_stock' => {
+    const qty = Number(item.current_stock ?? item.quantity ?? 0);
+    const min = Number(item.minimum_stock ?? item.low_stock_threshold ?? 0);
+    if (qty <= 0) return 'out_of_stock';
+    if (qty <= min) return 'low_stock';
+    return 'in_stock';
+  };
+
+  const getStatusStyle = (status: 'in_stock' | 'low_stock' | 'out_of_stock') => {
     return { 
-      ok: { color: '#22C55E', bg: '#DCFCE7' }, 
-      low: { color: '#F59E0B', bg: '#FEF3C7' }, 
-      critical: { color: '#EF4444', bg: '#FEE2E2' } 
+      in_stock: { color: '#22C55E', bg: '#DCFCE7' }, 
+      low_stock: { color: '#F59E0B', bg: '#FEF3C7' }, 
+      out_of_stock: { color: '#EF4444', bg: '#FEE2E2' } 
     }[status];
   };
 
   const getProgressWidth = (item: InventoryRecord): number => {
-    const max = item.low_stock_threshold * 3;
-    return Math.min(1, item.quantity / max);
+    const qty = Number(item.current_stock ?? item.quantity ?? 0);
+    const min = Number(item.minimum_stock ?? item.low_stock_threshold ?? 0);
+    const max = min * 3;
+    return max > 0 ? Math.min(1, qty / max) : 0;
+  };
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const cleanDate = dateStr.split('T')[0];
+      const parts = cleanDate.split('-');
+      if (parts.length === 3) {
+        const year = parts[0];
+        const monthIndex = parseInt(parts[1]) - 1;
+        const day = parseInt(parts[2]).toString();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${day} ${months[monthIndex]} ${year}`;
+      }
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    } catch {
+      return '';
+    }
   };
 
   return (
@@ -156,39 +194,76 @@ export default function InventoryScreen() {
             const status = getStockStatus(item);
             const statusStyle = getStatusStyle(status);
             const progressWidth = getProgressWidth(item);
+            const tracked = isTrackedItem(item.item_name);
+            const isPendingPayment = item.payment_status === 'Pending';
 
             return (
               <TouchableOpacity 
                 key={item.id} 
                 style={[styles.itemCard, SHADOW.sm]}
-                activeOpacity={0.7}
-                disabled={!!activeStaff && !activePermissions?.inventory}
+                activeOpacity={tracked ? 0.9 : 0.7}
                 onPress={() => {
+                  
+                  if (tracked) {
+                    Alert.alert(
+                      "Tracked Item",
+                      `Manual stock updates are disabled for "${t(`inventory.items.${item.item_name}`) || item.item_name}". Stock levels and prices are automatically synced from Purchases.`
+                    );
+                    return;
+                  }
+                  if (activeStaff && !activePermissions?.inventory) return;
                   setSelectedItem(item);
                   setNewQty('');
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
                 <View style={styles.itemHeader}>
                   <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>
-                      {t(`inventory.items.${item.item_name}`) || item.item_name}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.itemName}>
+                        {t(`inventory.items.${item.item_name}`) || item.item_name}
+                      </Text>
+                      {tracked && (
+                        <Ionicons name="lock-closed" size={13} color="#94A3B8" />
+                      )}
+                    </View>
                     <View style={styles.qtyRow}>
                       <Text style={styles.currentQtyText}>
-                        <Text style={{ fontWeight: '800' }}>{item.quantity}</Text> {item.unit}
+                        <Text style={{ fontWeight: '800' }}>{item.current_stock ?? item.quantity}</Text> {getItemUnit(item)}
                       </Text>
                       <Text style={styles.minQtyText}>
-                        Min: {item.low_stock_threshold} {item.unit}
+                        Min: {item.minimum_stock ?? item.low_stock_threshold} {getItemUnit(item)}
                       </Text>
                     </View>
                   </View>
+                  
                   <View style={styles.itemRight}>
-                    <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                      <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>
-                        {t(`inventory.status.${status}`)}
-                      </Text>
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      {/* Payment Status Badge */}
+                      <View style={[
+                        styles.statusBadge,
+                        { backgroundColor: isPendingPayment ? '#FEF3C7' : '#DCFCE7' }
+                      ]}>
+                        <Text style={[
+                          styles.statusBadgeText,
+                          { color: isPendingPayment ? '#D97706' : '#15803D' }
+                        ]}>
+                          {isPendingPayment ? '🟡 Pending' : '🟢 Paid'}
+                        </Text>
+                      </View>
+
+                      {/* Stock Status Badge */}
+                      <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                        <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>
+                          {t(`inventory.status.${status}`) || status.replace('_', ' ')}
+                        </Text>
+                      </View>
                     </View>
+
+                    {(item.last_purchase_date || item.last_updated) && (
+                      <Text style={styles.lastUpdatedText}>
+                        Updated: {formatDate(item.last_purchase_date || item.last_updated)}
+                      </Text>
+                    )}
                   </View>
                 </View>
 
@@ -249,7 +324,7 @@ export default function InventoryScreen() {
                       {t('inventory.current_stock')}
                     </Text>
                     <Text style={styles.currentQtyValue}>
-                      {selectedItem.quantity} {selectedItem.unit}
+                      {selectedItem.current_stock ?? selectedItem.quantity} {getItemUnit(selectedItem)}
                     </Text>
                   </View>
                 )}
@@ -258,7 +333,7 @@ export default function InventoryScreen() {
                   value={newQty}
                   onChangeText={setNewQty}
                   keyboardType="decimal-pad"
-                  suffix={selectedItem?.unit}
+                  suffix={selectedItem ? getItemUnit(selectedItem) : undefined}
                   autoFocus
                 />
                 <Button
@@ -464,5 +539,11 @@ const styles = StyleSheet.create({
     fontWeight: '800', 
     color: '#0F172A',
     marginTop: 4, 
+  },
+  lastUpdatedText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 6,
+    fontWeight: '600',
   },
 });

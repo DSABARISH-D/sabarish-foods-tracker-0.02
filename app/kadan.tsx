@@ -13,7 +13,6 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useKadanStore, useAuthStore } from '@/store';
 import { KadanCard } from '@/components/kadan/KadanCard';
@@ -36,7 +35,7 @@ export default function KadanScreen() {
 
   useEffect(() => {
     if (activeStaff && !activePermissions?.credit) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
       router.replace('/tabs');
     }
   }, [activeStaff, activePermissions]);
@@ -92,7 +91,7 @@ export default function KadanScreen() {
       await addKadan(form);
       setShowModal(false);
       setForm({ customer_name: '', mobile_number: '', amount: 0, due_date: getTodayDate(), notes: '' });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
     } catch {
       Alert.alert(t('common.error') || 'Error', t('errors.unknown') || 'Failed to save');
     } finally {
@@ -124,7 +123,7 @@ export default function KadanScreen() {
           style={[styles.addBtn, SHADOW.sm]}
           onPress={() => {
             setShowModal(true);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            
           }}
         >
           <Ionicons name="add" size={24} color="#F97316" />

@@ -11,7 +11,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/store';
 import { COLORS, SHADOW } from '@/constants/theme';
@@ -76,11 +75,11 @@ export default function LoginScreen() {
 
   const handleKeyPress = async (digit: string) => {
     if (lockoutTime) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     setErrorMessage('');
 
     if (setupStep === 'login') {
@@ -99,13 +98,13 @@ export default function LoginScreen() {
 
       if (updated.length === 4) {
         if (updated === '0909') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          
           setErrorMessage('Cannot use the default MPIN (0909)');
           setNewPin('');
           return;
         }
         // Proceed to confirm step
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        
         setSetupStep('confirm_pin');
       }
     } else if (setupStep === 'confirm_pin') {
@@ -115,7 +114,7 @@ export default function LoginScreen() {
 
       if (updated.length === 4) {
         if (updated !== newPin) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          
           setErrorMessage('MPINs do not match. Try again.');
           setNewPin('');
           setConfirmPin('');
@@ -129,7 +128,7 @@ export default function LoginScreen() {
   };
 
   const handleBackspace = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     setErrorMessage('');
     if (setupStep === 'login') {
       setMpin(mpin.slice(0, -1));
@@ -144,16 +143,16 @@ export default function LoginScreen() {
     const res = await loginWithMpin(enteredPin);
     if (res.success) {
       if (res.forceChangePin) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        
         setFirstLoginUser(res.user);
         setSetupStep('new_pin');
         setErrorMessage('');
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
         router.replace('/tabs');
       }
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
       setMpin('');
       
       // Update failed attempts and lock if >= 5
@@ -177,7 +176,7 @@ export default function LoginScreen() {
     if (!firstLoginUser) return;
     const res = await completeFirstLogin(firstLoginUser.id, completedPin);
     if (res.success) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
       Alert.alert('Setup Complete', 'Your new MPIN has been saved successfully.', [
         {
           text: 'Continue',
@@ -185,7 +184,7 @@ export default function LoginScreen() {
         },
       ]);
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
       setErrorMessage(res.error || 'Failed to save new MPIN');
       setNewPin('');
       setConfirmPin('');

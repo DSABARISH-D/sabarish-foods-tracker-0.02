@@ -106,13 +106,12 @@ export async function insertStaff(ownerId: string, form: StaffForm): Promise<Sta
   // Create default permissions
   await supabase.from('permissions').insert({
     user_id: data.id,
-    can_view_home: true,
-    can_manage_expenses: form.role === 'owner',
-    can_manage_inventory: form.role === 'owner',
-    can_manage_credit: form.role === 'owner',
-    can_view_reports: form.role === 'owner',
-    can_manage_staff: form.role === 'owner',
-    can_manage_settings: form.role === 'owner',
+    dashboard: true,
+    expenses: form.role === 'owner',
+    inventory: form.role === 'owner',
+    credit: form.role === 'owner',
+    reports: form.role === 'owner',
+    settings: form.role === 'owner',
   });
 
   return {
@@ -327,20 +326,20 @@ export async function fetchPermissions(staffId: string): Promise<StaffPermission
   const { data, error } = await supabase
     .from('permissions')
     .select('*')
-    .eq('user_id', staffId)
+    .eq('staff_id', staffId)
     .single();
   if (error) return null;
   
   return {
     id: data.id,
-    staff_id: data.user_id,
-    owner_id: data.user_id,
-    dashboard: data.can_view_home,
-    expenses: data.can_manage_expenses,
-    inventory: data.can_manage_inventory,
-    credit: data.can_manage_credit,
-    reports: data.can_view_reports,
-    settings: data.can_manage_settings,
+    staff_id: data.staff_id,
+    owner_id: data.owner_id,
+    dashboard: data.dashboard,
+    expenses: data.expenses,
+    inventory: data.inventory,
+    credit: data.credit,
+    reports: data.reports,
+    settings: data.settings,
     created_at: data.created_at,
     updated_at: data.updated_at,
   };
@@ -351,17 +350,17 @@ export async function updatePermissions(
   permissions: Partial<Pick<StaffPermissions, 'dashboard' | 'expenses' | 'inventory' | 'credit' | 'reports' | 'settings'>>
 ): Promise<void> {
   const updateData: Record<string, any> = {};
-  if (permissions.dashboard !== undefined) updateData.can_view_home = permissions.dashboard;
-  if (permissions.expenses !== undefined) updateData.can_manage_expenses = permissions.expenses;
-  if (permissions.inventory !== undefined) updateData.can_manage_inventory = permissions.inventory;
-  if (permissions.credit !== undefined) updateData.can_manage_credit = permissions.credit;
-  if (permissions.reports !== undefined) updateData.can_view_reports = permissions.reports;
-  if (permissions.settings !== undefined) updateData.can_manage_settings = permissions.settings;
+  if (permissions.dashboard !== undefined) updateData.dashboard = permissions.dashboard;
+  if (permissions.expenses !== undefined) updateData.expenses = permissions.expenses;
+  if (permissions.inventory !== undefined) updateData.inventory = permissions.inventory;
+  if (permissions.credit !== undefined) updateData.credit = permissions.credit;
+  if (permissions.reports !== undefined) updateData.reports = permissions.reports;
+  if (permissions.settings !== undefined) updateData.settings = permissions.settings;
 
   const { error } = await supabase
     .from('permissions')
     .update(updateData)
-    .eq('user_id', staffId);
+    .eq('staff_id', staffId);
   if (error) throw error;
 }
 

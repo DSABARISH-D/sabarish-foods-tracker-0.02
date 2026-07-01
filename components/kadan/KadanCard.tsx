@@ -8,7 +8,6 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { SHADOW } from '@/constants/theme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Kadan } from '@/types';
@@ -26,7 +25,7 @@ export function KadanCard({ kadan, onMarkPaid, onDelete, onEdit }: KadanCardProp
   const [expanded, setExpanded] = useState(false);
 
   const handleWhatsApp = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     const message = t('kadan.whatsapp_message', {
       name: kadan.customer_name,
       amount: kadan.amount.toString(),
@@ -39,12 +38,12 @@ export function KadanCard({ kadan, onMarkPaid, onDelete, onEdit }: KadanCardProp
   };
 
   const handleMarkPaid = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
     onMarkPaid(kadan.id);
   };
 
   const handleDelete = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     Alert.alert(
       t('common.delete'),
       t('kadan.confirm_delete'),

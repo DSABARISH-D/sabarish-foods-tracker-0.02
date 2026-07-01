@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { getLocalDateString } from '@/lib/utils';
 import { SHADOW } from '@/constants/theme';
 import { useStaffStore } from '@/store/staffStore';
 import { useAuthStore } from '@/store';
@@ -53,7 +53,7 @@ export default function StaffTabScreen() {
     }
   }, [user]);
 
-  const dateStr = attendanceDate.toISOString().split('T')[0];
+  const dateStr = getLocalDateString(attendanceDate);
 
   const load = useCallback(async () => {
     await Promise.all([
@@ -75,14 +75,14 @@ export default function StaffTabScreen() {
   };
 
   const changeDate = (days: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     const newDate = new Date(attendanceDate);
     newDate.setDate(newDate.getDate() + days);
     setAttendanceDate(newDate);
   };
 
   const handleMarkAttendance = async (staffId: string, status: 'present' | 'absent' | 'half_day' | 'leave') => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
     try {
       await saveAttendance(staffId, dateStr, status);
     } catch (e: any) {
@@ -91,14 +91,14 @@ export default function StaffTabScreen() {
   };
 
   const handleAddStaff = async (form: StaffForm) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     await addStaff(form);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
   };
 
   const handleEditStaff = async (form: StaffForm) => {
     if (!editingStaff) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     const { mpin, ...rest } = form;
     await editStaff(editingStaff.id, rest);
     setEditingStaff(null);
@@ -113,7 +113,7 @@ export default function StaffTabScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          
           await removeStaff(staff.id);
           setSelectedStaff(null);
         },
@@ -184,7 +184,7 @@ export default function StaffTabScreen() {
               style={[styles.tab, tab === t.key && styles.tabActive]}
               onPress={() => {
                 setTab(t.key);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                
               }}
             >
               <Ionicons name={t.icon} size={15} color={tab === t.key ? '#FFF' : '#64748B'} />
@@ -360,7 +360,7 @@ export default function StaffTabScreen() {
         <TouchableOpacity
           style={[styles.fab, SHADOW.lg]}
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            
             tab === 'owners' ? setAddOwnerModal(true) : setAddModal(true);
           }}
         >
