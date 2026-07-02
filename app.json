@@ -49,6 +49,12 @@
     "scheme": "sabarish-foods",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e2142cb7-5150-4af9-9e75-5105b23b9eca"
+      }
     }
   }
 }
