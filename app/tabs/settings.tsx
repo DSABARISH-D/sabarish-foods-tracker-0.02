@@ -240,7 +240,7 @@ export default function SettingsScreen() {
           <View style={styles.profileContent}>
             <View style={[styles.avatar, { backgroundColor: '#FFEDD5' }]}>
               <Image 
-                source={require('../../assets/logo.png')} 
+                source={require('../../assets/logo.jpg')} 
                 style={styles.avatarImage} 
               />
             </View>

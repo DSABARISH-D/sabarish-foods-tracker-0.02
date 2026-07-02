@@ -151,7 +151,7 @@ export default function Index() {
           <View style={styles.glowRing1} />
           <View style={styles.glowRing2} />
           <Image
-            source={require('../assets/logo.png')}
+            source={require('../assets/logo.jpg')}
             style={styles.logo}
             resizeMode="cover"
           />

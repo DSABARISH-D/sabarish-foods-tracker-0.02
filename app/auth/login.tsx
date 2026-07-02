@@ -223,7 +223,7 @@ export default function LoginScreen() {
         style={styles.hero}
       >
         <Image
-          source={require('../../assets/logo.png')}
+          source={require('../../assets/logo.jpg')}
           style={styles.logoImage}
           resizeMode="contain"
         />
