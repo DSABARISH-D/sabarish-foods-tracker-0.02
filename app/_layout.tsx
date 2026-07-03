@@ -21,6 +21,11 @@ export default function RootLayout() {
       await initialize();
       // Initialize Google Sheets sync (queue, network monitor)
       useSyncStore.getState().initialize();
+      
+      if (__DEV__) {
+        console.log("Supabase URL:", process.env.EXPO_PUBLIC_SUPABASE_URL);
+      }
+      
       await SplashScreen.hideAsync();
     };
     boot();
@@ -37,7 +42,6 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="auth/login" />
         <Stack.Screen name="tabs" />
         <Stack.Screen name="kadan" options={{ animation: 'slide_from_right' }} />
       </Stack>

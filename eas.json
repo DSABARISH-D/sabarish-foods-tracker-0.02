@@ -6,11 +6,25 @@
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://aknwolfrkqispsxxhclp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrbndvbGZya3Fpc3BzeHhoY2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDgyNDAsImV4cCI6MjA5Nzg4NDI0MH0.MiyD8rwGhh6afRDvHJPLszOUKLDnoHrYjZh1-G7Lnbg",
+        "EXPO_PUBLIC_SHEETS_SPREADSHEET_ID": "your-spreadsheet-id-here",
+        "EXPO_PUBLIC_SHEETS_API_KEY": "your-sheets-api-key-here",
+        "EXPO_PUBLIC_GOOGLE_SCRIPT_URL": "https://script.google.com/macros/s/AKfycbw-Cme31seW3U-0t5VeG_iG3LngCY6di4kGep0qZApNaKvnFw0kHSVOapZbqom-s4O5xg/exec"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://aknwolfrkqispsxxhclp.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrbndvbGZya3Fpc3BzeHhoY2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDgyNDAsImV4cCI6MjA5Nzg4NDI0MH0.MiyD8rwGhh6afRDvHJPLszOUKLDnoHrYjZh1-G7Lnbg",
+        "EXPO_PUBLIC_SHEETS_SPREADSHEET_ID": "your-spreadsheet-id-here",
+        "EXPO_PUBLIC_SHEETS_API_KEY": "your-sheets-api-key-here",
+        "EXPO_PUBLIC_GOOGLE_SCRIPT_URL": "https://script.google.com/macros/s/AKfycbw-Cme31seW3U-0t5VeG_iG3LngCY6di4kGep0qZApNaKvnFw0kHSVOapZbqom-s4O5xg/exec"
       }
     }
   }
