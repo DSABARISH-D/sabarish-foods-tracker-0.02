@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TrendChart } from '@/components/reports/TrendChart';
 import { fetchReportDataByDateRange } from '@/services/supabase.service';
 import { ReportDataPoint } from '@/types';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 export default function DashboardScreen() {
   const { user, activeStaff, activePermissions } = useAuthStore();
   const { stats, statsLoading, loadStats } = useDashboardStore();
@@ -32,6 +32,7 @@ export default function DashboardScreen() {
   const { loadKadan } = useKadanStore();
   const { loadCash, updateCash } = useCashStore();
   const { t } = useTranslation();
+  const router = useRouter();
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -187,13 +188,17 @@ export default function DashboardScreen() {
                 <Text style={styles.statValue}>{formatCurrency(s.today_sales)}</Text>
               </View>
               
-              <View style={[styles.card, styles.statCard, SHADOW.sm]}>
+              <TouchableOpacity 
+                style={[styles.card, styles.statCard, SHADOW.sm]}
+                onPress={() => router.push('/tabs/expenses')}
+                activeOpacity={0.7}
+              >
                 <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
                   <Ionicons name="trending-down-outline" size={20} color="#EF4444" />
                 </View>
                 <Text style={styles.statLabel}>Today's Expenses</Text>
                 <Text style={styles.statValue}>{formatCurrency(s.today_expenses)}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
             <View style={[styles.card, styles.profitCard, SHADOW.sm]}>
@@ -212,8 +217,8 @@ export default function DashboardScreen() {
             <View style={{ marginTop: 8 }}>
               <TrendChart
                 data={chartData}
-                title="Sales Analytics"
-                type="line"
+                title="Sales & Expenses Breakdown"
+                type="pie"
                 color="#F97316"
               />
             </View>

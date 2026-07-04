@@ -18,7 +18,7 @@ const { width, height } = Dimensions.get('window');
 const FOOD_ICONS = ['🍳', '🌶️', '🍚', '🥚', '🔥', '🍴', '🧅', '🌿', '⭐', '🥘', '🍗'];
 
 export default function Index() {
-  const { isLoading } = useAuthStore();
+  const { currentUser, isLoading } = useAuthStore();
   const [splashDone, setSplashDone] = useState(false);
 
   // Animations
@@ -95,7 +95,7 @@ export default function Index() {
   }, []);
 
   if (!isLoading && splashDone) {
-    return <Redirect href="/tabs" />;
+    return currentUser ? <Redirect href="/tabs" /> : <Redirect href="/auth/login" />;
   }
 
   // Background interpolation

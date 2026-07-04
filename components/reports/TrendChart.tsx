@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { LineChart, BarChart } from 'react-native-gifted-charts';
+import { LineChart, BarChart, PieChart } from 'react-native-gifted-charts';
 import { COLORS, FONTS, RADIUS, SHADOW, SPACING } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { ReportDataPoint } from '@/types';
@@ -11,7 +11,7 @@ const CHART_WIDTH = SCREEN_WIDTH - 64;
 interface TrendChartProps {
   data: ReportDataPoint[];
   title: string;
-  type?: 'line' | 'bar';
+  type?: 'line' | 'bar' | 'pie';
   color?: string;
 }
 
@@ -62,7 +62,43 @@ export function TrendChart({ data, title, type = 'line', color = COLORS.primary 
         <LegendDot color={COLORS.gradients.purple[0]} label="Expenses" />
       </View>
 
-      {type === 'bar' ? (
+      {type === 'pie' ? (
+        <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+          <PieChart
+            data={[
+              {
+                value: data.reduce((acc, curr) => acc + safeValue(curr.totalSales), 0),
+                color: COLORS.primary,
+                text: 'Sales',
+              },
+              {
+                value: data.reduce((acc, curr) => acc + safeValue(curr.totalExpenses), 0),
+                color: COLORS.gradients.purple[0],
+                text: 'Exp',
+              },
+            ].filter(item => item.value > 0) || [{ value: 1, color: '#f0f0f0' }]}
+            donut
+            radius={90}
+            innerRadius={60}
+            showText
+            textColor="#fff"
+            textSize={12}
+            centerLabelComponent={() => {
+              const totalS = data.reduce((acc, curr) => acc + safeValue(curr.totalSales), 0);
+              const totalE = data.reduce((acc, curr) => acc + safeValue(curr.totalExpenses), 0);
+              const profit = totalS - totalE;
+              return (
+                <View style={{justifyContent: 'center', alignItems: 'center'}}>
+                  <Text style={{fontSize: 20, color: profit >= 0 ? '#22C55E' : '#EF4444', fontWeight: 'bold'}}>
+                    {profit > 0 ? '+' : ''}{profit}
+                  </Text>
+                  <Text style={{fontSize: 12, color: colors.textTertiary}}>Profit</Text>
+                </View>
+              );
+            }}
+          />
+        </View>
+      ) : type === 'bar' ? (
         <BarChart
           {...chartProps}
           data={expData.map((d) => ({ ...d, frontColor: COLORS.gradients.purple[0] + 'CC' }))}
