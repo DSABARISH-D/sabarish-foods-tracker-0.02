@@ -101,6 +101,7 @@ export const EXPENSE_CATEGORY_EMOJIS: Record<ExpenseCategory, string> = {
   gas_cylinder: '🔥',
   staff: '👥',
   transport: '🚗',
+  water_supply: '💧',
   other: '📦',
 };
 

@@ -242,6 +242,9 @@ async function enqueueAndSync(payload: SyncPayload): Promise<SyncResponse> {
 async function attemptSync(item: SyncQueueItem): Promise<SyncResponse> {
   updateSyncState({ status: 'syncing' });
 
+  console.log(`[GoogleSheetSync] Sending ${item.payload.action} request to Google Apps Script for date: ${item.payload.date}`);
+  console.log(`[GoogleSheetSync] Request payload:`, JSON.stringify(item.payload, null, 2));
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await fetchWithTimeout(
@@ -260,7 +263,9 @@ async function attemptSync(item: SyncQueueItem): Promise<SyncResponse> {
 
       // Read response as text first to handle redirect or HTML error pages
       const text = await response.text();
-      let json: SyncResponse;
+      console.log(`[GoogleSheetSync] Raw response received:`, text);
+
+      let json: SyncResponse & { rowData?: any };
       try {
         json = JSON.parse(text);
       } catch (parseErr) {
@@ -269,6 +274,36 @@ async function attemptSync(item: SyncQueueItem): Promise<SyncResponse> {
       }
 
       if (json.success) {
+        console.log(`[GoogleSheetSync] Success! Sheet: ${json.sheet}, Row: ${json.row}`);
+
+        // VERIFICATION LOGIC (Requirement 12 & 13)
+        if (json.rowData && item.payload.data) {
+          const sent = item.payload.data as Record<string, any>;
+          const received = json.rowData;
+          let hasMismatch = false;
+
+          for (const key of Object.keys(sent)) {
+            const sentValue = Number(sent[key]);
+            const receivedValue = Number(received[key]);
+
+            if (!isNaN(sentValue) && !isNaN(receivedValue)) {
+              if (sentValue !== receivedValue) {
+                console.error(`[GoogleSheetSync] VERIFICATION FAILED for column: ${key}`);
+                console.error(`[GoogleSheetSync] - Sent: ${sentValue} | Received: ${receivedValue}`);
+                hasMismatch = true;
+              }
+            } else if (typeof sent[key] === 'string' && sent[key] !== received[key]) {
+              console.error(`[GoogleSheetSync] VERIFICATION FAILED for column: ${key}`);
+              console.error(`[GoogleSheetSync] - Sent: '${sent[key]}' | Received: '${received[key]}'`);
+              hasMismatch = true;
+            }
+          }
+
+          if (!hasMismatch) {
+            console.log(`[GoogleSheetSync] Verification passed. All columns match Supabase data exactly.`);
+          }
+        }
+
         // Remove from queue
         await removeFromQueue(item.id);
         const now = new Date().toISOString();

@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/Button';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SettingsScreen() {
-  const { user, activeStaff, switchStaff, logoutStaff, signOut } = useAuthStore();
+  const { user, activeStaff, activePermissions, switchStaff, logoutStaff, signOut } = useAuthStore();
   const { language, theme, setLanguage, setTheme } = useUIStore();
   const {
     connectionStatus,
@@ -271,6 +271,21 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
+
+        {/* Features */}
+        {(!activeStaff || activePermissions?.notes) && (
+          <>
+            <SectionHeader title="Features" />
+            <View style={[styles.card, SHADOW.sm]}>
+              <SettingRow
+                icon="document-text-outline"
+                label="Notes"
+                subtitle="Manage your business notes and reminders"
+                onPress={() => router.push('/notes')}
+              />
+            </View>
+          </>
+        )}
 
         {/* Security */}
         <SectionHeader title="Security" />

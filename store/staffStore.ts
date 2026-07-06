@@ -24,7 +24,7 @@ import {
   fetchAttendance,
   markAttendance,
 } from '@/services/staff.service';
-import { useAuthStore, useDashboardStore, useExpensesStore } from '@/store';
+import { useAuthStore, useDashboardStore, useExpensesStore, useDateStore } from '@/store';
 import { gsSyncDailyTotals } from '@/services/googleSheet.service';
 import { fetchDailyTotalsForSync } from '@/services/supabase.service';
 import { getTodayDate } from '@/lib/utils';
@@ -146,8 +146,9 @@ export const useStaffStore = create<StaffStore>((set, get) => ({
     useExpensesStore.getState().loadExpenses();
 
     // Sync staff salary to Google Sheets
-    fetchDailyTotalsForSync(user.id, getTodayDate()).then(totals => {
-      gsSyncDailyTotals(totals, getTodayDate(), 'CREATE').catch(() => {});
+    const businessDate = useDateStore.getState().businessDate;
+    fetchDailyTotalsForSync(user.id, businessDate).then(totals => {
+      gsSyncDailyTotals(totals, businessDate, 'CREATE').catch(() => {});
     }).catch(console.error);
   },
 

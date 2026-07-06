@@ -317,6 +317,9 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 30,
     paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   logoImage: {
     width: 110,
@@ -339,6 +342,9 @@ const styles = StyleSheet.create({
   inputSection: {
     alignItems: 'center',
     paddingVertical: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   welcomeText: {
     fontSize: 20,
@@ -387,6 +393,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     gap: 12,
     marginBottom: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   keyboardRow: {
     flexDirection: 'row',

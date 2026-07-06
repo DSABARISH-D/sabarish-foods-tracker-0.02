@@ -16,6 +16,7 @@ export type ExpenseCategory =
   | 'gas_cylinder'
   | 'staff'
   | 'transport'
+  | 'water_supply'
   | 'other';
 export type StaffRole = 'cook' | 'cashier' | 'server' | 'delivery' | 'cleaner' | 'manager' | 'owner' | 'other';
 export type StaffStatus = 'active' | 'inactive';
@@ -84,6 +85,14 @@ export interface ExpenseForm {
   paid_date?: string | null;
 }
 
+export interface ExpenseItem {
+  id: string;
+  user_id: string;
+  item_name: string;
+  category: 'store_purchases' | 'market_purchases' | string;
+  created_at: string;
+}
+
 // ── Staff ─────────────────────────────────────────────────────────────
 export interface Staff {
   id: string;
@@ -148,6 +157,7 @@ export interface StaffPermissions {
   credit: boolean;
   reports: boolean;
   settings: boolean;
+  notes: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -345,4 +355,18 @@ export interface UIState {
   setTheme: (theme: Theme) => Promise<void>;
   setOffline: (offline: boolean) => void;
   setPendingSyncCount: (count: number) => void;
+}
+
+// ── Notes ─────────────────────────────────────────────────────────────
+export type NoteCategory = 'Business' | 'Supplier' | 'Customer' | 'Staff' | 'Reminder' | 'Other';
+
+export interface Note {
+  id: string;
+  restaurant_id: string;
+  title: string;
+  description: string;
+  category: NoteCategory | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }

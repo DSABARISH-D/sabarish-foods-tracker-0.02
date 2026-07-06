@@ -1,12 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { LineChart, BarChart, PieChart } from 'react-native-gifted-charts';
 import { COLORS, FONTS, RADIUS, SHADOW, SPACING } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { ReportDataPoint } from '@/types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 64;
 
 interface TrendChartProps {
   data: ReportDataPoint[];
@@ -17,6 +14,8 @@ interface TrendChartProps {
 
 export function TrendChart({ data, title, type = 'line', color = COLORS.primary }: TrendChartProps) {
   const { colors, isDark } = useTheme();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CHART_WIDTH = SCREEN_WIDTH - 64;
 
   if (!data || data.length === 0) {
     return (

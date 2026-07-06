@@ -4,6 +4,7 @@ import {
   DashboardStats,
   Expense,
   ExpenseForm,
+  ExpenseItem,
   InventoryRecord,
   Kadan,
   KadanForm,
@@ -193,6 +194,26 @@ export async function checkDayLocked(userId: string, date: string): Promise<bool
     .limit(1);
   if (error) return false;
   return (data ?? []).length > 0;
+}
+
+export async function fetchExpenseItems(userId: string): Promise<ExpenseItem[]> {
+  const { data, error } = await supabase
+    .from('expense_items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('item_name');
+  if (error) throw error;
+  return (data ?? []) as ExpenseItem[];
+}
+
+export async function insertExpenseItem(userId: string, itemName: string, category: string): Promise<ExpenseItem> {
+  const { data, error } = await supabase
+    .from('expense_items')
+    .insert({ user_id: userId, item_name: itemName, category })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as ExpenseItem;
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────
@@ -520,7 +541,6 @@ export async function fetchDailyTotalsForSync(userId: string, date: string) {
     water_supply: 0,
     transport: 0,
     other_expenses: 0,
-    cash_expenses: 0,
     cash_in_hand: 0,
     upi: 0,
     credit: 0
@@ -564,7 +584,6 @@ export async function fetchDailyTotalsForSync(userId: string, date: string) {
   if (cash) {
     totals.cash_in_hand = Math.max(totals.cash_in_hand, Number(cash.cash_in_hand || 0));
     totals.upi = Math.max(totals.upi, Number(cash.cash_in_bank || 0)); // map cash_in_bank to upi
-    totals.cash_expenses = Number(cash.cash_expenses || 0);
   }
 
   // 4. Process Kadan (Credit)
@@ -584,3 +603,75 @@ export async function fetchDailyTotalsForSync(userId: string, date: string) {
 
   return totals;
 }
+
+// ── Notes ─────────────────────────────────────────────────────────────
+
+export const fetchNotes = async (restaurantId: string) => {
+  const { data, error } = await supabase
+    .from('notes')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching notes:', error);
+    throw error;
+  }
+  return data || [];
+};
+
+export const insertNote = async (
+  restaurantId: string,
+  userId: string,
+  title: string,
+  description: string,
+  category: string | null
+) => {
+  const { data, error } = await supabase
+    .from('notes')
+    .insert([
+      {
+        restaurant_id: restaurantId,
+        created_by: userId,
+        title,
+        description,
+        category,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error inserting note:', error);
+    throw error;
+  }
+  return data;
+};
+
+export const updateNote = async (
+  id: string,
+  title: string,
+  description: string,
+  category: string | null
+) => {
+  const { data, error } = await supabase
+    .from('notes')
+    .update({ title, description, category, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating note:', error);
+    throw error;
+  }
+  return data;
+};
+
+export const deleteNote = async (id: string) => {
+  const { error } = await supabase.from('notes').delete().eq('id', id);
+  if (error) {
+    console.error('Error deleting note:', error);
+    throw error;
+  }
+};

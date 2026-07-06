@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SHADOW } from '@/constants/theme';
 import { Staff, StaffForm, StaffRole, StaffStatus } from '@/types';
@@ -56,7 +56,10 @@ export function AddStaffModal({ visible, onClose, onSave, editingStaff, isOwnerA
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.modalContainer}>
+      <KeyboardAvoidingView 
+        style={styles.modalContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color="#0F172A" /></TouchableOpacity>
           <Text style={styles.modalTitle}>{editingStaff ? 'Edit' : 'Add'} {isOwnerAccount ? 'Owner' : 'Staff'}</Text>
@@ -108,7 +111,7 @@ export function AddStaffModal({ visible, onClose, onSave, editingStaff, isOwnerA
           </TouchableOpacity>
           <View style={{ height: 40 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

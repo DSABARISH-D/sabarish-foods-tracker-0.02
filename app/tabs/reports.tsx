@@ -12,7 +12,7 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore, useInventoryStore, useExpensesStore } from '@/store';
@@ -32,8 +32,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_PAGE_WIDTH = SCREEN_WIDTH - 40; // 20px padding on each side
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -59,6 +57,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 const FALLBACK_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD', '#D4A5A5', '#A8E6CF', '#FFD3B6', '#DCDCDC'];
 
 export default function ReportsScreen() {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CHART_PAGE_WIDTH = SCREEN_WIDTH - 40;
   const { user, activeStaff } = useAuthStore();
   const { t } = useTranslation();
   const { inventory, loadInventory } = useInventoryStore();
@@ -360,7 +360,7 @@ export default function ReportsScreen() {
                 style={{ flexGrow: 0 }}
               >
                 {/* Page 1: Trend Chart */}
-                <View style={styles.chartPage}>
+                <View style={[styles.chartPage, { width: CHART_PAGE_WIDTH }]}>
                   <TrendChart
                     data={data}
                     title=""
@@ -370,7 +370,7 @@ export default function ReportsScreen() {
                 </View>
 
                 {/* Page 2: Business Summary Donut */}
-                <View style={styles.chartPage}>
+                <View style={[styles.chartPage, { width: CHART_PAGE_WIDTH }]}>
                   {pieDataSummary.length === 0 ? (
                     <Text style={styles.noDataText}>No data for this period</Text>
                   ) : (
@@ -419,7 +419,7 @@ export default function ReportsScreen() {
                 </View>
 
                 {/* Page 3: Expense Breakdown Donut */}
-                <View style={styles.chartPage}>
+                <View style={[styles.chartPage, { width: CHART_PAGE_WIDTH }]}>
                   {categoryData.length === 0 ? (
                     <Text style={styles.noDataText}>No expenses for this period</Text>
                   ) : (
@@ -862,9 +862,8 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   chartPage: {
-    width: CHART_PAGE_WIDTH,
-    padding: 20,
-    paddingBottom: 40, // space for dots
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   paginationDots: {
     position: 'absolute',

@@ -340,6 +340,7 @@ export async function fetchPermissions(staffId: string): Promise<StaffPermission
     credit: data.credit,
     reports: data.reports,
     settings: data.settings,
+    notes: data.notes || false,
     created_at: data.created_at,
     updated_at: data.updated_at,
   };
@@ -347,7 +348,7 @@ export async function fetchPermissions(staffId: string): Promise<StaffPermission
 
 export async function updatePermissions(
   staffId: string,
-  permissions: Partial<Pick<StaffPermissions, 'dashboard' | 'expenses' | 'inventory' | 'credit' | 'reports' | 'settings'>>
+  permissions: Partial<Pick<StaffPermissions, 'dashboard' | 'expenses' | 'inventory' | 'credit' | 'reports' | 'settings' | 'notes'>>
 ): Promise<void> {
   const updateData: Record<string, any> = {};
   if (permissions.dashboard !== undefined) updateData.dashboard = permissions.dashboard;

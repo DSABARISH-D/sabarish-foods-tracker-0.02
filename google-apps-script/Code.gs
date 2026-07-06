@@ -31,8 +31,7 @@ var COL = {
   PROFIT:         19,   // S
   RICE_STATUS:    20,   // T
   GAS_STATUS:     21,   // U
-  NOTES:          22,   // V
-  CASH_EXPENSES:  23    // W
+  NOTES:          22    // V
 };
 
 var HEADERS = [
@@ -40,7 +39,7 @@ var HEADERS = [
   'Total Sales', 'Chicken (Kg)', 'Chicken Cost', 'Grocery (Maligai)',
   'Indian Market', 'Store Purchase', 'Staff Salary', 'Gas',
   'Electricity', 'Water Supply', 'Transport', 'Other Expenses',
-  'Total Expenses', 'Profit', 'Rice Status', 'Gas Status', 'Notes', 'Cash Expenses'
+  'Total Expenses', 'Profit', 'Rice Status', 'Gas Status', 'Notes'
 ];
 
 var MONTH_NAMES = [
@@ -56,7 +55,7 @@ function doPost(e) {
     var payload = JSON.parse(e.postData.contents);
     var action = payload.action; // 'CREATE', 'UPDATE', 'DELETE'
     var date   = payload.date || getTodayDateString(); 
-    var totals = payload.totals; 
+    var totals = payload.totals || payload.data; 
 
     var sheet = getCurrentMonthSheet(date);
     var sheetName = sheet.getName();
@@ -77,9 +76,10 @@ function doPost(e) {
 
     recalculateTotals(sheet, row);
 
-    return jsonResponse(true, 'Google Sheet Updated', sheetName, row);
+    var rowData = getRowDataAsObject(sheet, row);
+    return jsonResponse(true, 'Google Sheet Updated', sheetName, row, rowData);
   } catch (err) {
-    return jsonResponse(false, err.toString(), null, null);
+    return jsonResponse(false, err.toString(), null, null, null);
   }
 }
 
@@ -87,7 +87,7 @@ function doPost(e) {
 // doGet — Health check
 // ============================================================
 function doGet(e) {
-  return jsonResponse(true, 'Google Apps Script is running', null, null);
+  return jsonResponse(true, 'Google Apps Script is running', null, null, null);
 }
 
 // ============================================================
@@ -108,7 +108,7 @@ function createRecord(sheet, dateStr, totals) {
     COL.CHICKEN_KG, COL.CHICKEN_COST, COL.GROCERY,
     COL.INDIAN_MARKET, COL.STORE_PURCHASE, COL.STAFF_SALARY,
     COL.GAS, COL.ELECTRICITY, COL.WATER_SUPPLY,
-    COL.TRANSPORT, COL.OTHER_EXPENSES, COL.CASH_EXPENSES
+    COL.TRANSPORT, COL.OTHER_EXPENSES
   ];
   numericCols.forEach(function(col) {
     sheet.getRange(newRow, col).setValue(0);
@@ -167,8 +167,9 @@ function findRowByDate(sheet, dateStr) {
     var cellValue = dateValues[i][0];
     if (cellValue === '') continue;
 
+    var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
     var cellStr = (cellValue instanceof Date) 
-      ? Utilities.formatDate(cellValue, Session.getScriptTimeZone(), 'dd-MM-yyyy')
+      ? Utilities.formatDate(cellValue, tz, 'dd-MM-yyyy')
       : cellValue.toString().trim();
 
     if (cellStr === formattedDate || cellStr === dateStr) {
@@ -200,11 +201,10 @@ function recalculateTotals(sheet, row) {
   var waterSupply   = getNumericValue(sheet, row, COL.WATER_SUPPLY);
   var transport     = getNumericValue(sheet, row, COL.TRANSPORT);
   var otherExpenses = getNumericValue(sheet, row, COL.OTHER_EXPENSES);
-  var cashExp       = getNumericValue(sheet, row, COL.CASH_EXPENSES);
 
   var totalExpenses = chickenCost + grocery + indianMarket + storePurchase +
                       staffSalary + gas + electricity + waterSupply +
-                      transport + otherExpenses + cashExp;
+                      transport + otherExpenses;
   sheet.getRange(row, COL.TOTAL_EXPENSES).setValue(totalExpenses);
 
   // Profit = Total Sales - Total Expenses
@@ -240,7 +240,6 @@ function buildUpdateMap(totals) {
   if (totals.water_supply !== undefined)   updates[COL.WATER_SUPPLY] = Math.max(0, totals.water_supply);
   if (totals.transport !== undefined)      updates[COL.TRANSPORT] = Math.max(0, totals.transport);
   if (totals.other_expenses !== undefined) updates[COL.OTHER_EXPENSES] = Math.max(0, totals.other_expenses);
-  if (totals.cash_expenses !== undefined)  updates[COL.CASH_EXPENSES] = Math.max(0, totals.cash_expenses);
   
   if (totals.rice_status !== undefined)    updates[COL.RICE_STATUS] = totals.rice_status;
   if (totals.gas_status !== undefined)     updates[COL.GAS_STATUS] = totals.gas_status;
@@ -295,7 +294,12 @@ function getNumericValue(sheet, row, col) {
 
 function formatDateForSheet(dateStr) {
   var p = dateStr.split('-');
-  return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : dateStr;
+  if (p.length === 3) {
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var m = parseInt(p[1], 10) - 1;
+    return "'" + p[2] + '-' + months[m] + '-' + p[0];
+  }
+  return dateStr;
 }
 
 function getTodayDateString() {
@@ -303,10 +307,11 @@ function getTodayDateString() {
   return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 }
 
-function jsonResponse(success, message, sheetName, row) {
+function jsonResponse(success, message, sheetName, row, rowData) {
   var res = { success: success, message: message };
   if (sheetName) res.sheet = sheetName;
   if (row) res.row = row;
+  if (rowData) res.rowData = rowData;
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -318,4 +323,27 @@ function createAllMonthsForYear(year) {
     var sheetName = MONTH_NAMES[month] + ' ' + targetYear;
     if (!ss.getSheetByName(sheetName)) createMonthlySheet(ss, sheetName);
   }
+}
+
+function getRowDataAsObject(sheet, row) {
+  var values = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  return {
+    cash_in_hand: values[COL.CASH_IN_HAND - 1] || 0,
+    upi: values[COL.UPI - 1] || 0,
+    credit: values[COL.CREDIT - 1] || 0,
+    chicken_kg: values[COL.CHICKEN_KG - 1] || 0,
+    chicken_cost: values[COL.CHICKEN_COST - 1] || 0,
+    grocery: values[COL.GROCERY - 1] || 0,
+    indian_market: values[COL.INDIAN_MARKET - 1] || 0,
+    store_purchase: values[COL.STORE_PURCHASE - 1] || 0,
+    staff_salary: values[COL.STAFF_SALARY - 1] || 0,
+    gas: values[COL.GAS - 1] || 0,
+    electricity: values[COL.ELECTRICITY - 1] || 0,
+    water_supply: values[COL.WATER_SUPPLY - 1] || 0,
+    transport: values[COL.TRANSPORT - 1] || 0,
+    other_expenses: values[COL.OTHER_EXPENSES - 1] || 0,
+    rice_status: values[COL.RICE_STATUS - 1] || '',
+    gas_status: values[COL.GAS_STATUS - 1] || '',
+    notes: values[COL.NOTES - 1] || ''
+  };
 }

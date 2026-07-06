@@ -8,6 +8,7 @@ import {
   DashboardState,
   Expense,
   ExpenseForm,
+  ExpenseItem,
   InventoryRecord,
   Kadan,
   KadanForm,
@@ -33,6 +34,8 @@ import {
   deleteExpense,
   lockExpensesForDate,
   checkDayLocked,
+  fetchExpenseItems,
+  insertExpenseItem,
   fetchInventory,
   upsertInventoryItem,
   fetchCashBalance,
@@ -291,6 +294,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
             credit: permsData.credit,
             reports: permsData.reports,
             settings: permsData.settings,
+            notes: permsData.notes || false,
             created_at: permsData.created_at,
             updated_at: permsData.updated_at,
           };
@@ -307,6 +311,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           credit: true,
           reports: true,
           settings: true,
+          notes: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -374,6 +379,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         credit: true,
         reports: true,
         settings: true,
+        notes: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -475,6 +481,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     AsyncStorage.removeItem('@sabarish_active_staff');
     AsyncStorage.removeItem('@sabarish_active_perms');
   },
+}));
+
+// ── Date Store ────────────────────────────────────────────────────────
+interface DateStore {
+  businessDate: string;
+  setBusinessDate: (date: string) => void;
+}
+
+export const useDateStore = create<DateStore>((set) => ({
+  businessDate: getTodayDate(),
+  setBusinessDate: (date: string) => set({ businessDate: date }),
 }));
 
 // ── Dashboard Store ───────────────────────────────────────────────────
@@ -613,8 +630,8 @@ export const useSalesStore = create<SalesStore>((set) => ({
     useDashboardStore.getState().loadStats();
 
     // 2. Sync to Google Sheets via Apps Script (with offline queue)
-    fetchDailyTotalsForSync(user.id, getTodayDate()).then(totals => {
-      gsSyncDailyTotals(totals, getTodayDate(), 'CREATE').catch(() => {});
+    fetchDailyTotalsForSync(user.id, form.date).then(totals => {
+      gsSyncDailyTotals(totals, form.date, 'CREATE').catch(() => {});
     }).catch(console.error);
   },
 
@@ -673,9 +690,12 @@ interface ExpensesStore {
   expenses: Expense[];
   expensesLoading: boolean;
   isDayLocked: boolean;
+  expenseItems: ExpenseItem[];
   loadExpenses: (date?: string) => Promise<void>;
+  loadExpenseItems: () => Promise<void>;
   checkDayLocked: (date: string) => Promise<void>;
   addExpense: (form: ExpenseForm, items?: any[]) => Promise<void>;
+  addExpenseItem: (name: string, category: string) => Promise<void>;
   removeExpense: (id: string) => Promise<void>;
   lockDay: (date: string) => Promise<void>;
   markExpensePaid: (id: string) => Promise<void>;
@@ -683,6 +703,7 @@ interface ExpensesStore {
 
 export const useExpensesStore = create<ExpensesStore>((set) => ({
   expenses: [],
+  expenseItems: [],
   expensesLoading: false,
   isDayLocked: false,
 
@@ -698,8 +719,30 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     }
   },
 
+  loadExpenseItems: async () => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    try {
+      const items = await fetchExpenseItems(user.id);
+      set({ expenseItems: items });
+    } catch (e) {
+      console.error('Failed to load expense items:', e);
+    }
+  },
+
   checkDayLocked: async (date: string) => {
     set({ isDayLocked: false });
+  },
+
+  addExpenseItem: async (name: string, category: string) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    try {
+      const newItem = await insertExpenseItem(user.id, name, category);
+      set((state) => ({ expenseItems: [...state.expenseItems, newItem] }));
+    } catch (e) {
+      console.error('Failed to add expense item:', e);
+    }
   },
 
   addExpense: async (form: ExpenseForm, items?: any[]) => {
@@ -853,15 +896,17 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     const user = useAuthStore.getState().user;
     if (!user) return;
     
+    const businessDate = useDateStore.getState().businessDate;
+    
     // Update local state first to be responsive
     set((s) => ({
       expenses: s.expenses.map((e) =>
-        e.id === id ? { ...e, payment_status: 'Paid', paid_date: getTodayDate() } : e
+        e.id === id ? { ...e, payment_status: 'Paid', paid_date: businessDate } : e
       ),
     }));
 
     // Update in Supabase
-    await updateExpensePaymentStatus(id, 'Paid', getTodayDate());
+    await updateExpensePaymentStatus(id, 'Paid', businessDate);
     useDashboardStore.getState().loadStats();
 
     // Get the updated expense record
@@ -945,9 +990,11 @@ export const useKadanStore = create<KadanStore>((set) => ({
     const kadan = await insertKadan(user.id, form);
     set((s) => ({ kadanList: [kadan, ...s.kadanList] }));
 
+    const businessDate = useDateStore.getState().businessDate;
+
     // Sync credit (kadan) to Google Sheets
-    fetchDailyTotalsForSync(user.id, getTodayDate()).then(totals => {
-      gsSyncDailyTotals(totals, getTodayDate(), 'CREATE').catch(() => {});
+    fetchDailyTotalsForSync(user.id, businessDate).then(totals => {
+      gsSyncDailyTotals(totals, businessDate, 'CREATE').catch(() => {});
     }).catch(console.error);
   },
 
@@ -963,7 +1010,7 @@ export const useKadanStore = create<KadanStore>((set) => ({
     if (!user) return;
     const kadan = useKadanStore.getState().kadanList.find((k) => k.id === id);
     if (kadan) {
-      const date = kadan.created_at ? kadan.created_at.split('T')[0] : getTodayDate();
+      const date = kadan.created_at ? kadan.created_at.split('T')[0] : useDateStore.getState().businessDate;
       fetchDailyTotalsForSync(user.id, date).then(totals => {
         gsSyncDailyTotals(totals, date, 'DELETE').catch(() => {});
       }).catch(console.error);
@@ -973,10 +1020,11 @@ export const useKadanStore = create<KadanStore>((set) => ({
   },
 
   markPaid: async (id: string) => {
+    const businessDate = useDateStore.getState().businessDate;
     await markKadanPaid(id);
     set((s) => ({
       kadanList: s.kadanList.map((k) =>
-        k.id === id ? { ...k, status: 'paid', paid_date: getTodayDate() } : k
+        k.id === id ? { ...k, status: 'paid', paid_date: businessDate } : k
       ),
     }));
   },
@@ -1014,17 +1062,19 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
     if (!user) return;
     const item = useInventoryStore.getState().inventory.find((i) => i.id === id);
     if (!item) return;
+    
+    const date = useDateStore.getState().businessDate;
     await upsertInventoryItem(user.id, item.item_name, quantity);
+    
     set((s) => {
       const inventory = s.inventory.map((i) =>
-        i.id === id ? { ...i, quantity, last_updated: new Date().toISOString() } : i
+        i.id === id ? { ...i, quantity, last_updated: new Date(date).toISOString() } : i
       );
       const lowStockItems = inventory.filter((i) => i.quantity <= i.low_stock_threshold);
       return { inventory, lowStockItems };
     });
 
     // Sync inventory to Google Sheets
-    const date = getTodayDate();
     fetchDailyTotalsForSync(user.id, date).then(totals => {
       gsSyncDailyTotals(totals, date, 'UPDATE').catch(() => {});
     }).catch(console.error);
@@ -1117,3 +1167,5 @@ export async function initUIPreferences() {
     // Use defaults
   }
 }
+
+export * from './notesStore';
