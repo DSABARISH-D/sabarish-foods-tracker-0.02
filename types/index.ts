@@ -87,10 +87,11 @@ export interface ExpenseForm {
 
 export interface ExpenseItem {
   id: string;
-  user_id: string;
+  created_by: string;
   item_name: string;
   category: 'store_purchases' | 'market_purchases' | string;
   created_at: string;
+  updated_at: string;
 }
 
 // ── Staff ─────────────────────────────────────────────────────────────
@@ -370,3 +371,4 @@ export interface Note {
   created_at: string;
   updated_at: string;
 }
+

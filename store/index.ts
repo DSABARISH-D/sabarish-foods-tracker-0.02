@@ -1169,3 +1169,4 @@ export async function initUIPreferences() {
 }
 
 export * from './notesStore';
+export * from './expenseItemsStore';

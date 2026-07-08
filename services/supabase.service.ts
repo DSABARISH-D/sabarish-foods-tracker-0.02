@@ -200,16 +200,25 @@ export async function fetchExpenseItems(userId: string): Promise<ExpenseItem[]> 
   const { data, error } = await supabase
     .from('expense_items')
     .select('*')
-    .eq('user_id', userId)
+    .eq('created_by', userId)
     .order('item_name');
-  if (error) throw error;
+    
+  if (error) {
+    if (error.code === 'PGRST205') {
+      if (__DEV__) {
+        console.warn('Supabase: table "expense_items" not found. Please run the SQL migration.');
+      }
+      return [];
+    }
+    throw error;
+  }
   return (data ?? []) as ExpenseItem[];
 }
 
 export async function insertExpenseItem(userId: string, itemName: string, category: string): Promise<ExpenseItem> {
   const { data, error } = await supabase
     .from('expense_items')
-    .insert({ user_id: userId, item_name: itemName, category })
+    .insert({ created_by: userId, item_name: itemName, category })
     .select()
     .single();
   if (error) throw error;
@@ -614,6 +623,12 @@ export const fetchNotes = async (restaurantId: string) => {
     .order('updated_at', { ascending: false });
 
   if (error) {
+    if (error.code === 'PGRST205') {
+      if (__DEV__) {
+        console.warn('Supabase: table "notes" not found. Please run the SQL migration.');
+      }
+      return [];
+    }
     console.error('Error fetching notes:', error);
     throw error;
   }
@@ -675,3 +690,4 @@ export const deleteNote = async (id: string) => {
     throw error;
   }
 };
+

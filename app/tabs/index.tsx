@@ -22,7 +22,8 @@ import { formatCurrency } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Ionicons } from '@expo/vector-icons';
 import { TrendChart } from '@/components/reports/TrendChart';
-import { fetchReportDataByDateRange } from '@/services/supabase.service';
+import { ExpenseBreakdownChart } from '@/components/reports/ExpenseBreakdownChart';
+import { fetchReportDataByDateRange, fetchExpensesByCategory } from '@/services/supabase.service';
 import { ReportDataPoint } from '@/types';
 import { useFocusEffect, useRouter } from 'expo-router';
 export default function DashboardScreen() {
@@ -38,6 +39,7 @@ export default function DashboardScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [chartData, setChartData] = useState<ReportDataPoint[]>([]);
+  const [expenseBreakdown, setExpenseBreakdown] = useState<any[]>([]);
 
   // Cash Edit State
   const [editingField, setEditingField] = useState<'petty' | 'hand' | 'bank' | 'expenses' | null>(null);
@@ -52,6 +54,7 @@ export default function DashboardScreen() {
     
     // Optimistically clear data to avoid flashing stale charts during fetch
     setChartData([]);
+    setExpenseBreakdown([]);
     
     await Promise.all([
       loadStats(dateStr), 
@@ -67,8 +70,12 @@ export default function DashboardScreen() {
         const startDateStr = getLocalDateString(sd);
         const data = await fetchReportDataByDateRange(user.id, startDateStr, dateStr);
         setChartData(data);
+        
+        const breakdown = await fetchExpensesByCategory(user.id, startDateStr, dateStr);
+        setExpenseBreakdown(breakdown);
       } catch (e) {
         setChartData([]);
+        setExpenseBreakdown([]);
       }
     }
   }, [selectedDate, user]);
@@ -213,14 +220,9 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Sales Analytics Chart */}
+            {/* Expense Breakdown Chart */}
             <View style={{ marginTop: 8 }}>
-              <TrendChart
-                data={chartData}
-                title="Sales & Expenses Breakdown"
-                type="pie"
-                color="#F97316"
-              />
+              <ExpenseBreakdownChart data={expenseBreakdown} />
             </View>
 
             <View style={{ height: 20 }} />

@@ -13,9 +13,10 @@ import {
   TextInput,
   Animated,
   FlatList,
+  ToastAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useExpensesStore, useAuthStore, useInventoryStore } from '@/store';
+import { useExpensesStore, useAuthStore, useInventoryStore, useExpenseItemsStore } from '@/store';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ChickenCalculator } from '@/components/expenses/ChickenCalculator';
@@ -29,24 +30,17 @@ import { getTodayDate, formatCurrency, getLocalDateString } from '@/lib/utils';
 import { Ionicons } from '@expo/vector-icons';
 
 // ── Constants ───────────────────────────────────────────────────────
-const CATEGORIES: { key: any; icon: any; label: string }[] = [
-  { key: 'chicken_cost',     icon: 'fast-food-outline',  label: 'Chicken Cost'      },
-  { key: 'store_purchases',  icon: 'cart-outline',        label: 'Store Purchases'   },
-  { key: 'market_purchases', icon: 'basket-outline',      label: 'Market Purchases'  },
-  { key: 'indian_market',    icon: 'leaf-outline',        label: 'Indian Market'     },
-  { key: 'electricity',      icon: 'flash-outline',       label: 'Electricity'       },
-  { key: 'gas_cylinder',     icon: 'flame-outline',       label: 'Gas'               },
-  { key: 'staff',            icon: 'people-outline',      label: 'Staff'             },
-  { key: 'credit_kadan',     icon: 'wallet-outline',      label: 'Credit Kadan'      },
-  { key: 'transport',        icon: 'car-outline',         label: 'Transport'         },
-  { key: 'other',            icon: 'cube-outline',        label: 'Other'             },
-];
-
-// Store Purchases – quick suggestion items
-const STORE_QUICK_ITEMS = [
-  'Eggs', 'Cooking Oil', 'Rice', 'Paper Cups', 'Parcel Covers',
-  'Plastic Covers', 'Tissue Paper', 'Rubber Bands', 'Match Box',
-  'Plastic Spoons', 'Carry Bags',
+const CATEGORIES: { key: any; icon: any; iconColor?: string; label: string }[] = [
+  { key: 'store_purchases',  icon: 'cart',               iconColor: '#F97316', label: 'Store'             },
+  { key: 'market_purchases', icon: 'basket',             iconColor: '#22C55E', label: 'Market'            },
+  { key: 'chicken_cost',     icon: 'fast-food',          iconColor: '#F97316', label: 'Chicken'           },
+  { key: 'indian_market',    icon: 'bag',                iconColor: '#A855F7', label: 'Indian Market'     },
+  { key: 'gas_cylinder',     icon: 'flame',              iconColor: '#EF4444', label: 'Gas'               },
+  { key: 'transport',        icon: 'bus',                iconColor: '#64748B', label: 'Transport'         },
+  { key: 'electricity',      icon: 'flash',              iconColor: '#EAB308', label: 'Electricity'       },
+  { key: 'staff',            icon: 'people',             iconColor: '#3B82F6', label: 'Staff'             },
+  { key: 'credit_kadan',     icon: 'wallet',             iconColor: '#0F172A', label: 'Credit Kadan'      },
+  { key: 'other',            icon: 'cube',               iconColor: '#94A3B8', label: 'Other'             },
 ];
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -84,6 +78,9 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
   const [activeItem, setActiveItem] = useState<PurchaseItem>({ id: 'active', name: '', quantity: '', price: '', paymentStatus: 'Paid' });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const { items: masterItems, addItem } = useExpenseItemsStore();
+  const storeItems = masterItems.filter((i) => i.category === 'store_purchases').map((i) => i.item_name);
 
   const nameInputRef = useRef<TextInput>(null);
 
@@ -164,8 +161,8 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
 
   const getSuggestions = (name: string): string[] => {
     const q = name.toLowerCase().trim();
-    if (!q) return STORE_QUICK_ITEMS;
-    return STORE_QUICK_ITEMS.filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q);
+    if (!q) return storeItems;
+    return storeItems.filter((s) => s.toLowerCase().includes(q));
   };
 
   return (
@@ -173,44 +170,66 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
       {/* Active Form Card */}
       <View style={styles.itemCard}>
         <View style={styles.itemHeader}>
-          <Text style={styles.storePurchasesTitle}>New Purchase Item</Text>
-          {validationError && (
-            <Text style={styles.validationErrorText}>{validationError}</Text>
-          )}
+          <Ionicons name="cart" size={20} color="#F97316" />
+          <Text style={styles.storePurchasesTitle}>Add Item (Store Purchase)</Text>
         </View>
+        
+        {validationError && (
+          <Text style={[styles.validationErrorText, { textAlign: 'left', marginBottom: 8 }]}>{validationError}</Text>
+        )}
 
-        {/* Item Name Input with horizontal suggestions */}
-        <View style={{ marginBottom: 10 }}>
-          <Text style={styles.fieldLabel}>Item Name</Text>
+        {/* Item Name Input with Search Icon */}
+        <View style={{ marginBottom: 12, position: 'relative' }}>
+          <Ionicons name="search-outline" size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 12, zIndex: 1 }} />
           <TextInput
             ref={nameInputRef}
-            style={styles.fieldInput}
+            style={[styles.fieldInput, { paddingLeft: 38 }]}
             value={activeItem.name}
             onChangeText={(v) => handleActiveChange('name', v)}
-            placeholder="e.g. Eggs, Cooking Oil..."
+            placeholder="Search item..."
             placeholderTextColor="#CBD5E1"
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => {
               setTimeout(() => setShowSuggestions(false), 200);
             }}
           />
+          {activeItem.name.length > 0 && (
+             <TouchableOpacity style={{ position: 'absolute', right: 12, top: 12, zIndex: 1 }} onPress={() => { handleActiveChange('name', ''); setShowSuggestions(false); }}>
+               <Ionicons name="close-outline" size={18} color="#94A3B8" />
+             </TouchableOpacity>
+          )}
+
           {showSuggestions && (
-            <View style={styles.suggestionsBox}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always">
-                <View style={{ flexDirection: 'row', gap: 8, padding: 8 }}>
-                  {getSuggestions(activeItem.name).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.suggestionChip}
-                      onPress={() => {
-                        handleActiveChange('name', s);
-                        
-                      }}
-                    >
-                      <Text style={styles.suggestionChipText}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            <View style={[styles.suggestionsBox, { position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, maxHeight: 150 }]}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="always">
+                {getSuggestions(activeItem.name).map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                    onPress={() => {
+                      handleActiveChange('name', s);
+                      setShowSuggestions(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, color: '#0F172A' }}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+                {activeItem.name.trim().length > 0 && !storeItems.find(i => i.toLowerCase() === activeItem.name.trim().toLowerCase()) && (
+                  <TouchableOpacity
+                    style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF7ED' }}
+                    onPress={async () => {
+                      const newName = activeItem.name.trim();
+                      try {
+                        await addItem(newName, 'store_purchases');
+                        handleActiveChange('name', newName);
+                        setShowSuggestions(false);
+                      } catch (err) {}
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#F97316" />
+                    <Text style={{ fontSize: 14, color: '#F97316', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             </View>
           )}
@@ -218,29 +237,35 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
 
         {/* Qty / Price row */}
         <View style={styles.itemFieldsRow}>
-          {/* Quantity */}
+          {/* Quantity Stepper */}
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>Qty</Text>
-            <TextInput
-              style={styles.fieldInput}
-              value={activeItem.quantity}
-              onChangeText={(v) => handleActiveChange('quantity', v)}
-              placeholder="0"
-              placeholderTextColor="#CBD5E1"
-              keyboardType="decimal-pad"
-            />
+            <View style={styles.stepperContainer}>
+              <TouchableOpacity onPress={() => handleActiveChange('quantity', String(Math.max(0, (parseFloat(activeItem.quantity) || 0) - 1)))} style={styles.stepperBtn}>
+                 <Ionicons name="remove" size={20} color="#64748B" />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.stepperInput}
+                value={activeItem.quantity}
+                onChangeText={(v) => handleActiveChange('quantity', v)}
+                keyboardType="decimal-pad"
+                placeholder="1"
+              />
+              <TouchableOpacity onPress={() => handleActiveChange('quantity', String((parseFloat(activeItem.quantity) || 0) + 1))} style={styles.stepperBtn}>
+                 <Ionicons name="add" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Price */}
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>Price (₹)</Text>
-            <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }]}>
-              <Text style={{ color: '#94A3B8', marginRight: 4, fontSize: 14 }}>₹</Text>
+            <View style={styles.fieldInput}>
               <TextInput
-                style={{ flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600', paddingVertical: 12 }}
+                style={{ flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600' }}
                 value={activeItem.price}
                 onChangeText={(v) => handleActiveChange('price', v)}
-                placeholder="0"
+                placeholder="0.00"
                 placeholderTextColor="#CBD5E1"
                 keyboardType="decimal-pad"
               />
@@ -276,72 +301,77 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
             </View>
           </View>
         )}
+
+        {/* Add Item Button Inside Card */}
+        <TouchableOpacity style={styles.addItemBtnInside} onPress={handleAddItem}>
+          <Ionicons name="add" size={20} color="#FFF" />
+          <Text style={styles.addItemTextInside}>Add Item</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Add Item Button */}
-      <TouchableOpacity style={styles.addItemBtn} onPress={handleAddItem}>
-        <Ionicons name="add-circle-outline" size={22} color="#F97316" />
-        <Text style={styles.addItemText}>Add Item</Text>
-      </TouchableOpacity>
-
-      {/* Purchase List (Editable Table) */}
+      {/* Added Items List */}
       {items.length > 0 && (
-        <View style={styles.summaryTable}>
-          <View style={styles.summaryHeaderRow}>
-            <Text style={[styles.summaryCell, { flex: 2.2 }]}>Item</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1 }]}>Qty</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1.2 }]}>Price</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1.2 }]}>Total</Text>
-            <View style={{ width: 30 }} />
+        <View style={{ marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>Added Items ({items.length})</Text>
+            <TouchableOpacity onPress={() => setItems([])} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="trash-outline" size={14} color="#EF4444" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#EF4444' }}>Clear All</Text>
+            </TouchableOpacity>
           </View>
-          {items.map((item) => (
-            <View key={item.id} style={styles.summaryDataRow}>
-              <View style={{ flex: 2.2 }}>
-                <TextInput
-                  style={[styles.tableInput, { width: '100%' }]}
-                  value={item.name}
-                  onChangeText={(v) => handleTableChange(item.id, 'name', v)}
-                  placeholder="Item"
-                />
-                {item.name.toLowerCase().trim() === 'rice' && item.paymentStatus === 'Pending' && (
-                  <Text style={{ fontSize: 9, color: '#D97706', fontWeight: '800', marginTop: 2, marginLeft: 2 }}>🟡 PENDING</Text>
-                )}
+          
+          {items.map((item) => {
+            const isRice = item.name.toLowerCase().trim() === 'rice';
+            return (
+              <View key={item.id} style={styles.addedItemCard}>
+                <View style={styles.addedItemIconBox}>
+                   <Text style={{fontSize: 22}}>🛒</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.addedItemName}>{item.name}</Text>
+                  <Text style={styles.addedItemPrice}>₹{item.price} each</Text>
+                  {isRice && item.paymentStatus === 'Pending' && (
+                    <Text style={{ fontSize: 9, color: '#D97706', fontWeight: '800', marginTop: 2 }}>🟡 PENDING</Text>
+                  )}
+                </View>
+                <View style={styles.addedItemRight}>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4}}>
+                    <View style={styles.stepperContainerSmall}>
+                      <TouchableOpacity onPress={() => {
+                        const newQty = Math.max(1, (parseFloat(item.quantity) || 0) - 1);
+                        handleTableChange(item.id, 'quantity', String(newQty));
+                      }} style={styles.stepperBtnSmall}>
+                         <Ionicons name="remove" size={14} color="#64748B" />
+                      </TouchableOpacity>
+                      <Text style={styles.stepperTextSmall}>{item.quantity}</Text>
+                      <TouchableOpacity onPress={() => {
+                        const newQty = (parseFloat(item.quantity) || 0) + 1;
+                        handleTableChange(item.id, 'quantity', String(newQty));
+                      }} style={styles.stepperBtnSmall}>
+                         <Ionicons name="add" size={14} color="#F97316" />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.addedItemTotal}>₹{itemTotal(item).toFixed(2)}</Text>
+                    <TouchableOpacity onPress={() => handleTableDelete(item.id)}>
+                       <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
-              <TextInput
-                style={[styles.tableInput, styles.summaryCellRight, { flex: 1, marginLeft: 6 }]}
-                value={item.quantity}
-                onChangeText={(v) => handleTableChange(item.id, 'quantity', v)}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <TextInput
-                style={[styles.tableInput, styles.summaryCellRight, { flex: 1.2, marginLeft: 6 }]}
-                value={item.price}
-                onChangeText={(v) => handleTableChange(item.id, 'price', v)}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <Text style={[styles.summaryCellData, styles.summaryCellRight, { flex: 1.2, fontWeight: '700', color: '#0F172A', alignSelf: 'center' }]}>
-                ₹{itemTotal(item).toFixed(0)}
-              </Text>
-              <TouchableOpacity
-                onPress={() => handleTableDelete(item.id)}
-                style={{ width: 30, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Ionicons name="trash-outline" size={16} color="#EF4444" />
-              </TouchableOpacity>
-            </View>
-          ))}
+            );
+          })}
+          
+          <View style={styles.totalAmountBar}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+               <View style={styles.walletIconBox}>
+                 <Ionicons name="wallet" size={18} color="#FFF" />
+               </View>
+               <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFF' }}>Total Amount</Text>
+             </View>
+             <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFF' }}>₹{total.toFixed(2)}</Text>
+          </View>
         </View>
       )}
-
-      {/* Total Amount Card */}
-      <View style={styles.subtotalCard}>
-        <View style={styles.subtotalRow}>
-          <Text style={styles.subtotalLabel}>Total Amount</Text>
-          <Text style={styles.subtotalAmount}>₹{total.toFixed(2)}</Text>
-        </View>
-      </View>
 
       {/* Save Button */}
       <TouchableOpacity
@@ -363,12 +393,6 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
 }
 
 // ── Market Purchases Form ────────────────────────────────────────────
-const MARKET_QUICK_ITEMS = [
-  'Beans', 'Carrot', 'Capsicum', 'Cabbage', 'Onion', 'Tomato',
-  'Potato', 'Brinjal', 'Drumstick', 'Green Chilli', 'Coriander Leaves',
-  'Curry Leaves', 'Mint Leaves', 'Spinach', 'Cauliflower', 'Beetroot',
-  'Radish', 'Lemon', 'Ginger', 'Garlic'
-];
 
 interface MarketPurchasesFormProps {
   onSave: (total: number, description: string) => void;
@@ -380,6 +404,9 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
   const [activeItem, setActiveItem] = useState<PurchaseItem>({ id: 'active', name: '', quantity: '', price: '' });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  const { items: masterItems, addItem } = useExpenseItemsStore();
+  const marketItems = masterItems.filter((i) => i.category === 'market_purchases').map((i) => i.item_name);
 
   const nameInputRef = useRef<TextInput>(null);
 
@@ -455,8 +482,8 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
 
   const getSuggestions = (name: string): string[] => {
     const q = name.toLowerCase().trim();
-    if (!q) return MARKET_QUICK_ITEMS;
-    return MARKET_QUICK_ITEMS.filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q);
+    if (!q) return marketItems;
+    return marketItems.filter((s) => s.toLowerCase().includes(q));
   };
 
   return (
@@ -464,44 +491,66 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
       {/* Active Form Card */}
       <View style={styles.itemCard}>
         <View style={styles.itemHeader}>
-          <Text style={styles.storePurchasesTitle}>New Market Item</Text>
-          {validationError && (
-            <Text style={styles.validationErrorText}>{validationError}</Text>
-          )}
+          <Ionicons name="basket" size={20} color="#F97316" />
+          <Text style={styles.storePurchasesTitle}>Add Item (Market Purchase)</Text>
         </View>
+        
+        {validationError && (
+          <Text style={[styles.validationErrorText, { textAlign: 'left', marginBottom: 8 }]}>{validationError}</Text>
+        )}
 
-        {/* Item Name Input with horizontal suggestions */}
-        <View style={{ marginBottom: 10 }}>
-          <Text style={styles.fieldLabel}>Item Name</Text>
+        {/* Item Name Input with Search Icon */}
+        <View style={{ marginBottom: 12, position: 'relative' }}>
+          <Ionicons name="search-outline" size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 12, zIndex: 1 }} />
           <TextInput
             ref={nameInputRef}
-            style={styles.fieldInput}
+            style={[styles.fieldInput, { paddingLeft: 38 }]}
             value={activeItem.name}
             onChangeText={(v) => handleActiveChange('name', v)}
-            placeholder="e.g. Beans, Carrot..."
+            placeholder="Search item..."
             placeholderTextColor="#CBD5E1"
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => {
               setTimeout(() => setShowSuggestions(false), 200);
             }}
           />
+          {activeItem.name.length > 0 && (
+             <TouchableOpacity style={{ position: 'absolute', right: 12, top: 12, zIndex: 1 }} onPress={() => { handleActiveChange('name', ''); setShowSuggestions(false); }}>
+               <Ionicons name="close-outline" size={18} color="#94A3B8" />
+             </TouchableOpacity>
+          )}
+
           {showSuggestions && (
-            <View style={styles.suggestionsBox}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always">
-                <View style={{ flexDirection: 'row', gap: 8, padding: 8 }}>
-                  {getSuggestions(activeItem.name).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={styles.suggestionChip}
-                      onPress={() => {
-                        handleActiveChange('name', s);
-                        
-                      }}
-                    >
-                      <Text style={styles.suggestionChipText}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            <View style={[styles.suggestionsBox, { position: 'absolute', top: 50, left: 0, right: 0, zIndex: 10, maxHeight: 150 }]}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="always">
+                {getSuggestions(activeItem.name).map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                    onPress={() => {
+                      handleActiveChange('name', s);
+                      setShowSuggestions(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, color: '#0F172A' }}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+                {activeItem.name.trim().length > 0 && !marketItems.find(i => i.toLowerCase() === activeItem.name.trim().toLowerCase()) && (
+                  <TouchableOpacity
+                    style={{ padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF7ED' }}
+                    onPress={async () => {
+                      const newName = activeItem.name.trim();
+                      try {
+                        await addItem(newName, 'market_purchases');
+                        handleActiveChange('name', newName);
+                        setShowSuggestions(false);
+                      } catch (err) {}
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#F97316" />
+                    <Text style={{ fontSize: 14, color: '#F97316', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             </View>
           )}
@@ -509,96 +558,106 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
 
         {/* Qty / Price row */}
         <View style={styles.itemFieldsRow}>
-          {/* Quantity */}
+          {/* Quantity Stepper */}
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>Qty</Text>
-            <TextInput
-              style={styles.fieldInput}
-              value={activeItem.quantity}
-              onChangeText={(v) => handleActiveChange('quantity', v)}
-              placeholder="0"
-              placeholderTextColor="#CBD5E1"
-              keyboardType="decimal-pad"
-            />
+            <View style={styles.stepperContainer}>
+              <TouchableOpacity onPress={() => handleActiveChange('quantity', String(Math.max(0, (parseFloat(activeItem.quantity) || 0) - 1)))} style={styles.stepperBtn}>
+                 <Ionicons name="remove" size={20} color="#64748B" />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.stepperInput}
+                value={activeItem.quantity}
+                onChangeText={(v) => handleActiveChange('quantity', v)}
+                keyboardType="decimal-pad"
+                placeholder="1"
+              />
+              <TouchableOpacity onPress={() => handleActiveChange('quantity', String((parseFloat(activeItem.quantity) || 0) + 1))} style={styles.stepperBtn}>
+                 <Ionicons name="add" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Price */}
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>Price (₹)</Text>
-            <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }]}>
-              <Text style={{ color: '#94A3B8', marginRight: 4, fontSize: 14 }}>₹</Text>
+            <View style={styles.fieldInput}>
               <TextInput
-                style={{ flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600', paddingVertical: 12 }}
+                style={{ flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600' }}
                 value={activeItem.price}
                 onChangeText={(v) => handleActiveChange('price', v)}
-                placeholder="0"
+                placeholder="0.00"
                 placeholderTextColor="#CBD5E1"
                 keyboardType="decimal-pad"
               />
             </View>
           </View>
         </View>
+
+        {/* Add Item Button Inside Card */}
+        <TouchableOpacity style={styles.addItemBtnInside} onPress={handleAddItem}>
+          <Ionicons name="add" size={20} color="#FFF" />
+          <Text style={styles.addItemTextInside}>Add Item</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Add Item Button */}
-      <TouchableOpacity style={styles.addItemBtn} onPress={handleAddItem}>
-        <Ionicons name="add-circle-outline" size={22} color="#F97316" />
-        <Text style={styles.addItemText}>Add Item</Text>
-      </TouchableOpacity>
-
-      {/* Purchase List (Editable Table) */}
+      {/* Added Items List */}
       {items.length > 0 && (
-        <View style={styles.summaryTable}>
-          <View style={styles.summaryHeaderRow}>
-            <Text style={[styles.summaryCell, { flex: 2.2 }]}>Item</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1 }]}>Qty</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1.2 }]}>Price</Text>
-            <Text style={[styles.summaryCell, styles.summaryCellRight, { flex: 1.2 }]}>Total</Text>
-            <View style={{ width: 30 }} />
+        <View style={{ marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>Added Items ({items.length})</Text>
+            <TouchableOpacity onPress={() => setItems([])} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="trash-outline" size={14} color="#EF4444" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#EF4444' }}>Clear All</Text>
+            </TouchableOpacity>
           </View>
+          
           {items.map((item) => (
-            <View key={item.id} style={styles.summaryDataRow}>
-              <TextInput
-                style={[styles.tableInput, { flex: 2.2 }]}
-                value={item.name}
-                onChangeText={(v) => handleTableChange(item.id, 'name', v)}
-                placeholder="Item"
-              />
-              <TextInput
-                style={[styles.tableInput, styles.summaryCellRight, { flex: 1, marginLeft: 6 }]}
-                value={item.quantity}
-                onChangeText={(v) => handleTableChange(item.id, 'quantity', v)}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <TextInput
-                style={[styles.tableInput, styles.summaryCellRight, { flex: 1.2, marginLeft: 6 }]}
-                value={item.price}
-                onChangeText={(v) => handleTableChange(item.id, 'price', v)}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <Text style={[styles.summaryCellData, styles.summaryCellRight, { flex: 1.2, fontWeight: '700', color: '#0F172A', alignSelf: 'center' }]}>
-                ₹{itemTotal(item).toFixed(0)}
-              </Text>
-              <TouchableOpacity
-                onPress={() => handleTableDelete(item.id)}
-                style={{ width: 30, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Ionicons name="trash-outline" size={16} color="#EF4444" />
-              </TouchableOpacity>
+            <View key={item.id} style={styles.addedItemCard}>
+              <View style={[styles.addedItemIconBox, {backgroundColor: '#ECFDF5'}]}>
+                 <Text style={{fontSize: 22}}>🧺</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addedItemName}>{item.name}</Text>
+                <Text style={styles.addedItemPrice}>₹{item.price} each</Text>
+              </View>
+              <View style={styles.addedItemRight}>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4}}>
+                  <View style={styles.stepperContainerSmall}>
+                    <TouchableOpacity onPress={() => {
+                      const newQty = Math.max(1, (parseFloat(item.quantity) || 0) - 1);
+                      handleTableChange(item.id, 'quantity', String(newQty));
+                    }} style={styles.stepperBtnSmall}>
+                       <Ionicons name="remove" size={14} color="#64748B" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperTextSmall}>{item.quantity}</Text>
+                    <TouchableOpacity onPress={() => {
+                      const newQty = (parseFloat(item.quantity) || 0) + 1;
+                      handleTableChange(item.id, 'quantity', String(newQty));
+                    }} style={styles.stepperBtnSmall}>
+                       <Ionicons name="add" size={14} color="#10B981" />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.addedItemTotal}>₹{itemTotal(item).toFixed(2)}</Text>
+                  <TouchableOpacity onPress={() => handleTableDelete(item.id)}>
+                     <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           ))}
+          
+          <View style={styles.totalAmountBar}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+               <View style={styles.walletIconBox}>
+                 <Ionicons name="wallet" size={18} color="#FFF" />
+               </View>
+               <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFF' }}>Total Amount</Text>
+             </View>
+             <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFF' }}>₹{total.toFixed(2)}</Text>
+          </View>
         </View>
       )}
-
-      {/* Total Amount Card */}
-      <View style={styles.marketTotalCard}>
-        <View style={styles.subtotalRow}>
-          <Text style={styles.marketTotalLabel}>Total Amount</Text>
-          <Text style={styles.marketTotalAmount}>₹{total.toFixed(2)}</Text>
-        </View>
-      </View>
 
       {/* Save Button */}
       <TouchableOpacity
@@ -623,6 +682,7 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
 export default function ExpensesScreen() {
   const { expenses, expensesLoading, isDayLocked, loadExpenses, checkDayLocked, addExpense, removeExpense, lockDay, markExpensePaid } =
     useExpensesStore();
+  const { loadItems } = useExpenseItemsStore();
   const { activeStaff, activePermissions } = useAuthStore();
   const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
@@ -645,7 +705,7 @@ export default function ExpensesScreen() {
   const today = getTodayDate();
 
   const load = useCallback(async () => {
-    await Promise.all([loadExpenses(today), checkDayLocked(today)]);
+    await Promise.all([loadExpenses(today), checkDayLocked(today), loadItems()]);
   }, [today]);
 
   useEffect(() => { load(); }, []);
@@ -813,7 +873,13 @@ export default function ExpensesScreen() {
               <Text style={styles.headerSubtitle}>Manage today's expenses</Text>
             </View>
             <View style={styles.totalBadge}>
-              <Text style={styles.totalBadgeLabel}>Today</Text>
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6}}>
+                <Ionicons name="calendar-outline" size={16} color="#94A3B8" />
+                <Text style={{color: '#FFF', fontSize: 13, fontWeight: '700'}}>
+                  {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </Text>
+              </View>
+              <Text style={styles.totalBadgeLabel}>Today's Total</Text>
               <Text style={styles.totalAmount}>{formatCurrency(todayTotal)}</Text>
             </View>
           </View>
@@ -840,7 +906,7 @@ export default function ExpensesScreen() {
                     }}
                     style={[styles.catChip, { backgroundColor: isActive ? '#0F172A' : '#FFF', borderColor: isActive ? '#0F172A' : '#E2E8F0' }]}
                   >
-                    <Ionicons name={cat.icon} size={15} color={isActive ? '#FFF' : '#64748B'} />
+                    <Ionicons name={cat.icon} size={15} color={isActive ? '#FFF' : cat.iconColor || '#64748B'} />
                     <Text style={[styles.catLabel, { color: isActive ? '#FFF' : '#475569' }]} numberOfLines={1}>
                       {cat.label}
                     </Text>
@@ -944,9 +1010,10 @@ export default function ExpensesScreen() {
           {/* ── Expense List ── */}
           <View style={styles.listHeader}>
             <Text style={styles.sectionLabel}>Today's Expenses</Text>
-            <View style={styles.expenseCountBadge}>
-              <Text style={styles.expenseCountText}>{expenses.length}</Text>
-            </View>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#F97316' }}>View All </Text>
+              <Ionicons name="chevron-forward" size={14} color="#F97316" />
+            </TouchableOpacity>
           </View>
 
           {expensesLoading && expenses.length === 0 ? (
@@ -960,6 +1027,7 @@ export default function ExpensesScreen() {
                 const isPending = expense.payment_status === 'Pending';
                 const isOwner = !activeStaff;
                 const isRice = expense.description?.toLowerCase().includes('rice');
+                const iconBgColor = (catDef?.iconColor || '#64748B') + '1A'; // 10% opacity
 
                 const handleExpensePress = () => {
                   if (isPending && isOwner) {
@@ -973,7 +1041,6 @@ export default function ExpensesScreen() {
                           onPress: async () => {
                             try {
                               await markExpensePaid(expense.id);
-                              
                             } catch (err: any) {
                               Alert.alert("Error", err.message || "Failed to update payment status.");
                             }
@@ -990,19 +1057,21 @@ export default function ExpensesScreen() {
                     activeOpacity={isPending && isOwner ? 0.7 : 1}
                     onPress={handleExpensePress}
                     disabled={!(isPending && isOwner)}
-                    style={[styles.expenseRow, SHADOW.sm]}
+                    style={styles.expenseRow}
                   >
-                    <View style={[styles.expenseIcon, { backgroundColor: expense.category === 'store_purchases' ? '#FFF7ED' : '#F1F5F9' }]}>
+                    <View style={[styles.expenseIcon, { backgroundColor: iconBgColor, borderRadius: 24, width: 48, height: 48 }]}>
                       <Ionicons
-                        name={catDef?.icon || 'receipt-outline'}
-                        size={20}
-                        color={expense.category === 'store_purchases' ? '#F97316' : '#64748B'}
+                        name={catDef?.icon || 'receipt'}
+                        size={22}
+                        color={catDef?.iconColor || '#64748B'}
                       />
                     </View>
                     <View style={styles.expenseInfo}>
                       <Text style={styles.expenseName}>{catDef?.label || expense.category}</Text>
                       {expense.description ? (
-                        <Text style={styles.expenseDesc} numberOfLines={2}>{expense.description}</Text>
+                        <Text style={styles.expenseDesc} numberOfLines={1}>
+                           {expense.description.replace(/\n/g, ', ').replace(/, Total, ₹[0-9]+/, '')}
+                        </Text>
                       ) : null}
                       {expense.payment_status && (isRice || isPending) && (
                         <View style={[
@@ -1020,16 +1089,37 @@ export default function ExpensesScreen() {
                     </View>
                     <View style={styles.expenseRight}>
                       <Text style={styles.expenseAmount}>{formatCurrency(expense.amount)}</Text>
-                      <TouchableOpacity onPress={() => handleDelete(expense.id)} style={{ padding: 4 }}>
-                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                      </TouchableOpacity>
+                      <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                         {new Date(expense.created_at || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </Text>
                     </View>
+                    <TouchableOpacity onPress={() => handleDelete(expense.id)} style={{ paddingLeft: 12 }}>
+                      <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 );
               })}
             </View>
           )}
         </ScrollView>
+        
+        {/* Sticky Bottom Save Button */}
+        <View style={styles.stickyBottomBar}>
+           <TouchableOpacity
+             style={[styles.saveBtnSticky, (saving) && { opacity: 0.6 }]}
+             onPress={handleSave}
+             disabled={saving}
+           >
+             {saving ? (
+               <Text style={styles.saveBtnText}>Saving...</Text>
+             ) : (
+               <>
+                 <Ionicons name="checkmark-circle" size={22} color="#FFF" />
+                 <Text style={styles.saveBtnText}>Save Expense</Text>
+               </>
+             )}
+           </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1055,11 +1145,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    alignItems: 'center',
+    paddingVertical: 12,
+    alignItems: 'flex-start',
+    minWidth: 140,
   },
-  totalBadgeLabel: { color: '#94A3B8', fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginBottom: 2 },
-  totalAmount: { color: '#FFF', fontSize: 17, fontWeight: '800' },
+  totalBadgeLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  totalAmount: { color: '#F97316', fontSize: 22, fontWeight: '800' },
 
   // Category pills
   catScroll: { paddingLeft: 20 },
@@ -1143,17 +1234,17 @@ const styles = StyleSheet.create({
   storePurchasesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 10,
     backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
   storePurchasesIconBox: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 12,
     backgroundColor: '#FFF7ED',
     alignItems: 'center',
@@ -1165,8 +1256,8 @@ const styles = StyleSheet.create({
   // Item Card
   itemCard: {
     backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 12,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#F1F5F9',
     shadowColor: '#000',
@@ -1178,7 +1269,7 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
     gap: 8,
   },
   itemIndex: {
@@ -1194,14 +1285,14 @@ const styles = StyleSheet.create({
   itemDeleteBtn: { padding: 2 },
 
   // Fields
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginBottom: 5, letterSpacing: 0.3, textTransform: 'uppercase' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginBottom: 2, letterSpacing: 0.3, textTransform: 'uppercase' },
   fieldInput: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     fontSize: 14,
     fontWeight: '600',
     color: '#0F172A',
@@ -1212,10 +1303,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingVertical: 14,
-    borderRadius: 14,
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: '#FED7AA',
     borderStyle: 'dashed',
@@ -1225,15 +1316,15 @@ const styles = StyleSheet.create({
 
   // Subtotal
   subtotalCard: {
-    marginTop: 16,
+    marginTop: 10,
     backgroundColor: '#0F172A',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 12,
+    padding: 12,
   },
   subtotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   subtotalLabel: { fontSize: 14, fontWeight: '700', color: '#94A3B8' },
   subtotalHint: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  subtotalAmount: { fontSize: 28, fontWeight: '900', color: '#FFF' },
+  subtotalAmount: { fontSize: 20, fontWeight: '900', color: '#FFF' },
 
   // Summary Table
   summaryTable: {
@@ -1366,13 +1457,110 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   marketTotalCard: {
-    marginTop: 16,
+    marginTop: 10,
     backgroundColor: '#EFF6FF', // Light blue
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },
   marketTotalLabel: { fontSize: 14, fontWeight: '700', color: '#1E40AF' },
-  marketTotalAmount: { fontSize: 28, fontWeight: '900', color: '#1D4ED8' },
+  marketTotalAmount: { fontSize: 20, fontWeight: '900', color: '#1D4ED8' },
+
+  // New UI Styles
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  stepperBtn: { padding: 8 },
+  stepperInput: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  addItemBtnInside: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F97316',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginTop: 16,
+    gap: 6,
+  },
+  addItemTextInside: { fontSize: 15, fontWeight: '700', color: '#FFF' },
+  addedItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  addedItemIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  addedItemName: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  addedItemPrice: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  addedItemRight: { alignItems: 'flex-end', justifyContent: 'center' },
+  addedItemTotal: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  stepperContainerSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 4,
+  },
+  stepperBtnSmall: { padding: 4 },
+  stepperTextSmall: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginHorizontal: 8 },
+  totalAmountBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  walletIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickyBottomBar: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  saveBtnSticky: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F97316',
+    borderRadius: 12,
+    paddingVertical: 16,
+    gap: 8,
+  },
 });

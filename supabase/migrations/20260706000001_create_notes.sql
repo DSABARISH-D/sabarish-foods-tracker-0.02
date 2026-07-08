@@ -3,7 +3,7 @@ ALTER TABLE public.permissions ADD COLUMN IF NOT EXISTS notes BOOLEAN DEFAULT fa
 
 -- Create notes table
 CREATE TABLE IF NOT EXISTS public.notes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     restaurant_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
