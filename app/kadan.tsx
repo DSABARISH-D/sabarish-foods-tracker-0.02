@@ -25,6 +25,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { KadanForm, KadanStatus } from '@/types';
 import { validateMobile, validateAmount, formatCurrency, getTodayDate } from '@/lib/utils';
 import { Ionicons } from '@expo/vector-icons';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 type FilterType = 'all' | KadanStatus;
 
@@ -141,7 +142,7 @@ export default function KadanScreen() {
       {/* Search */}
       <View style={[styles.searchWrap, SHADOW.sm]}>
         <Ionicons name="search-outline" size={20} color="#94A3B8" />
-        <TextInput
+        <AppTextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}

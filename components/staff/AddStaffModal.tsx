@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SHADOW } from '@/constants/theme';
 import { Staff, StaffForm, StaffRole, StaffStatus } from '@/types';
 import { getLocalDateString } from '@/lib/utils';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 const ROLES: { key: StaffRole; label: string }[] = [
   { key: 'cook', label: 'Cook' }, { key: 'cashier', label: 'Cashier' },
@@ -67,15 +68,15 @@ export function AddStaffModal({ visible, onClose, onSave, editingStaff, isOwnerA
         </View>
         <ScrollView style={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.label}>Full Name *</Text>
-          <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#94A3B8" />
+          <AppTextInput style={styles.input} value={name} onChangeText={setName} placeholder="Enter full name" placeholderTextColor="#94A3B8" />
 
           <Text style={styles.label}>Phone Number *</Text>
-          <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="10-digit number" keyboardType="phone-pad" placeholderTextColor="#94A3B8" maxLength={10} />
+          <AppTextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="10-digit number" keyboardType="phone-pad" placeholderTextColor="#94A3B8" maxLength={10} />
 
           {!editingStaff && (
             <>
               <Text style={styles.label}>4-digit MPIN *</Text>
-              <TextInput style={styles.input} value={mpin} onChangeText={setMpin} placeholder="••••" keyboardType="number-pad" secureTextEntry maxLength={4} placeholderTextColor="#94A3B8" />
+              <AppTextInput style={styles.input} value={mpin} onChangeText={setMpin} placeholder="••••" keyboardType="number-pad" secureTextEntry maxLength={4} placeholderTextColor="#94A3B8" />
             </>
           )}
 
@@ -91,7 +92,7 @@ export function AddStaffModal({ visible, onClose, onSave, editingStaff, isOwnerA
               </View>
 
               <Text style={styles.label}>Monthly Salary (₹)</Text>
-              <TextInput style={styles.input} value={salary} onChangeText={setSalary} placeholder="0" keyboardType="decimal-pad" placeholderTextColor="#94A3B8" />
+              <AppTextInput style={styles.input} value={salary} onChangeText={setSalary} placeholder="0" keyboardType="decimal-pad" placeholderTextColor="#94A3B8" />
             </>
           )}
 

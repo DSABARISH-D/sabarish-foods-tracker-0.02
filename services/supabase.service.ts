@@ -420,74 +420,93 @@ export async function markKadanPaid(id: string): Promise<void> {
 
 // ── Reports Data ──────────────────────────────────────────────────────
 export async function fetchReportDataByDateRange(userId: string, startDate: string, endDate: string) {
-  // We need to fetch cash balances, kadan, and expenses within the range
-  const [cashRes, expRes, kadanRes] = await Promise.all([
+  // We need to fetch sales, cash balances, kadan, and expenses within the range
+  const [salesRes, cashRes, expRes, kadanRes] = await Promise.all([
+    supabase.from('sales').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
     supabase.from('cash_balance').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
     supabase.from('expenses').select('*').eq('user_id', userId).gte('date', startDate).lte('date', endDate),
     supabase.from('kadan').select('*').eq('user_id', userId).gte('created_at', startDate + 'T00:00:00').lte('created_at', endDate + 'T23:59:59')
   ]);
 
+  const salesData = salesRes.data || [];
   const cashData = cashRes.data || [];
   const expData = expRes.data || [];
   const kadanData = kadanRes.data || [];
 
-  // Group by date
+  const isDaily = startDate === endDate;
   const dateMap: Record<string, any> = {};
 
-  // Initialize dates
-  let current = new Date(startDate);
-  const end = new Date(endDate);
-  while (current <= end) {
-    const dStr = getLocalDateString(current);
-    dateMap[dStr] = {
-      label: dStr.slice(5),
-      date: dStr,
-      totalSales: 0,
-      totalExpenses: 0,
-      totalProfit: 0,
-      cashSales: 0,
-      upiSales: 0,
-      cashExpenses: 0,
-      creditSales: 0,
-      inventoryPurchases: 0
-    };
-    current.setDate(current.getDate() + 1);
-  }
+  const getOrCreateEntry = (key: string, label: string) => {
+    if (!dateMap[key]) {
+      dateMap[key] = {
+        label,
+        date: key,
+        totalSales: 0,
+        totalExpenses: 0,
+        totalProfit: 0,
+        cashSales: 0,
+        upiSales: 0,
+        cashExpenses: 0,
+        creditSales: 0,
+        inventoryPurchases: 0,
+        totalTransactions: 0
+      };
+    }
+    return dateMap[key];
+  };
 
-  cashData.forEach(row => {
-    const date = row.date;
-    if (dateMap[date]) {
-      const p = Number(row.petty_cash || 0);
-      const h = Number(row.cash_in_hand || 0);
-      const b = Number(row.cash_in_bank || 0);
-      const ce = Number(row.cash_expenses || 0);
-      
-      const sales = (h + b + ce) - p;
-      dateMap[date].totalSales = sales > 0 ? sales : 0;
-      dateMap[date].cashSales = (h + ce) - p > 0 ? (h + ce) - p : 0;
-      dateMap[date].upiSales = b;
-      dateMap[date].cashExpenses = ce;
+  const getKeyLabel = (row: any, defaultDate: string) => {
+    if (isDaily) {
+      const timestamp = row.created_at || row.updated_at;
+      if (timestamp) {
+        try {
+          const dateObj = new Date(timestamp);
+          const hr = dateObj.getHours().toString().padStart(2, '0');
+          return { key: hr, label: `${hr}:00` };
+        } catch (e) {}
+      }
+      return { key: '12', label: '12:00' };
+    }
+    return { key: defaultDate, label: defaultDate }; // e.g. 2026-07-08
+  };
+
+  salesData.forEach(row => {
+    const { key, label } = getKeyLabel(row, row.date);
+    const entry = getOrCreateEntry(key, label);
+    const amount = Number(row.amount || 0);
+    entry.totalSales += amount;
+    entry.totalTransactions += 1;
+    
+    if (row.payment_method === 'cash') {
+      entry.cashSales += amount;
+    } else if (row.payment_method === 'upi') {
+      entry.upiSales += amount;
     }
   });
 
+  cashData.forEach(row => {
+    const { key, label } = getKeyLabel(row, row.date);
+    const entry = getOrCreateEntry(key, label);
+    entry.cashExpenses += Number(row.cash_expenses || 0);
+  });
+
   expData.forEach(row => {
-    const date = row.date;
-    if (dateMap[date]) {
-      const amount = Number(row.amount || 0);
-      dateMap[date].totalExpenses += amount;
-      
-      // Calculate inventory purchases (market, store, chicken)
-      if (['market_purchases', 'store_purchases', 'chicken_cost'].includes(row.category)) {
-        dateMap[date].inventoryPurchases += amount;
-      }
+    const { key, label } = getKeyLabel(row, row.date);
+    const entry = getOrCreateEntry(key, label);
+    const amount = Number(row.amount || 0);
+    entry.totalExpenses += amount;
+    entry.totalTransactions += 1;
+    
+    if (['market_purchases', 'store_purchases', 'chicken_cost'].includes(row.category)) {
+      entry.inventoryPurchases += amount;
     }
   });
 
   kadanData.forEach(row => {
     const date = (row.created_at || row.updated_at || new Date().toISOString()).split('T')[0];
-    if (dateMap[date]) {
-      dateMap[date].creditSales += Number(row.amount || 0);
-    }
+    const { key, label } = getKeyLabel(row, date);
+    const entry = getOrCreateEntry(key, label);
+    entry.creditSales += Number(row.amount || 0);
   });
 
   // Calculate profit

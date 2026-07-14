@@ -72,7 +72,7 @@ export async function insertStaff(ownerId: string, form: StaffForm): Promise<Sta
   const { data: existing } = await supabase
     .from('users')
     .select('id, mpin_hash')
-    .eq('owner_id', ownerId);
+    .or(`owner_id.eq.${ownerId},id.eq.${ownerId}`);
 
   if (existing) {
     for (const u of existing) {
@@ -148,7 +148,7 @@ export async function resetStaffMpin(
   const { data: allUsers } = await supabase
     .from('users')
     .select('id, mpin_hash')
-    .eq('owner_id', ownerId)
+    .or(`owner_id.eq.${ownerId},id.eq.${ownerId}`)
     .neq('id', staffId);
 
   if (allUsers) {

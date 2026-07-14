@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SHADOW } from '@/constants/theme';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -226,7 +227,7 @@ export function StorePurchaseForm({ onTotalChange, categoryKey = 'store_purchase
 
           <View style={styles.itemFields}>
             {/* Item Name */}
-            <TextInput
+            <AppTextInput
               style={[styles.fieldInput, { flex: 2.5 }]}
               value={item.name}
               onChangeText={(v) => updateItem(item.id, 'name', v)}
@@ -236,7 +237,7 @@ export function StorePurchaseForm({ onTotalChange, categoryKey = 'store_purchase
             />
 
             {/* Quantity */}
-            <TextInput
+            <AppTextInput
               style={[styles.fieldInput, styles.numericInput, { flex: 1 }]}
               value={item.qty}
               onChangeText={(v) => updateItem(item.id, 'qty', v)}
@@ -258,7 +259,7 @@ export function StorePurchaseForm({ onTotalChange, categoryKey = 'store_purchase
             </TouchableOpacity>
 
             {/* Price */}
-            <TextInput
+            <AppTextInput
               style={[styles.fieldInput, styles.numericInput, { flex: 1.2 }]}
               value={item.price}
               onChangeText={(v) => updateItem(item.id, 'price', v)}

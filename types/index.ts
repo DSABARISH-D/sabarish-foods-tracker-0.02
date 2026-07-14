@@ -261,6 +261,7 @@ export interface ReportDataPoint {
   cashExpenses: number;
   creditSales: number;
   inventoryPurchases: number;
+  totalTransactions: number;
 }
 
 export interface ExpenseCategoryBreakdown {

@@ -31,9 +31,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 // ── Constants ───────────────────────────────────────────────────────
 const CATEGORIES: { key: any; icon: any; iconColor?: string; label: string }[] = [
-  { key: 'store_purchases',  icon: 'cart',               iconColor: '#F97316', label: 'Store'             },
+  { key: 'store_purchases',  icon: 'cart',               iconColor: '#60A5FA', label: 'Store'             },
   { key: 'market_purchases', icon: 'basket',             iconColor: '#22C55E', label: 'Market'            },
-  { key: 'chicken_cost',     icon: 'fast-food',          iconColor: '#F97316', label: 'Chicken'           },
+  { key: 'chicken_cost',     icon: 'fast-food',          iconColor: '#60A5FA', label: 'Chicken'           },
   { key: 'indian_market',    icon: 'bag',                iconColor: '#A855F7', label: 'Indian Market'     },
   { key: 'gas_cylinder',     icon: 'flame',              iconColor: '#EF4444', label: 'Gas'               },
   { key: 'transport',        icon: 'bus',                iconColor: '#64748B', label: 'Transport'         },
@@ -89,7 +89,7 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
     setActiveItem((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddItem = useCallback(() => {
+  const handleAddItem = useCallback(async () => {
     const name = activeItem.name.trim();
     const quantity = activeItem.quantity.trim();
     const price = activeItem.price.trim();
@@ -123,6 +123,11 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
     };
 
     setItems((prev) => [...prev, added]);
+
+    // Auto-save to master list if new
+    if (!storeItems.find(i => i.toLowerCase() === name.toLowerCase())) {
+       try { await addItem(name, 'store_purchases'); } catch(e) {}
+    }
 
     // Reset active fields
     setActiveItem({ id: 'active', name: '', quantity: '', price: '', paymentStatus: 'Paid' });
@@ -170,7 +175,7 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
       {/* Active Form Card */}
       <View style={styles.itemCard}>
         <View style={styles.itemHeader}>
-          <Ionicons name="cart" size={20} color="#F97316" />
+          <Ionicons name="cart" size={20} color="#60A5FA" />
           <Text style={styles.storePurchasesTitle}>Add Item (Store Purchase)</Text>
         </View>
         
@@ -179,7 +184,7 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
         )}
 
         {/* Item Name Input with Search Icon */}
-        <View style={{ marginBottom: 12, position: 'relative' }}>
+        <View style={{ marginBottom: 12, position: 'relative', zIndex: 50, elevation: 10 }}>
           <Ionicons name="search-outline" size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 12, zIndex: 1 }} />
           <TextInput
             ref={nameInputRef}
@@ -226,8 +231,8 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
                       } catch (err) {}
                     }}
                   >
-                    <Ionicons name="add-circle-outline" size={18} color="#F97316" />
-                    <Text style={{ fontSize: 14, color: '#F97316', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
+                    <Ionicons name="add-circle-outline" size={18} color="#60A5FA" />
+                    <Text style={{ fontSize: 14, color: '#60A5FA', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
                   </TouchableOpacity>
                 )}
               </ScrollView>
@@ -348,7 +353,7 @@ function StorePurchasesForm({ onSave, saving }: StorePurchasesFormProps) {
                         const newQty = (parseFloat(item.quantity) || 0) + 1;
                         handleTableChange(item.id, 'quantity', String(newQty));
                       }} style={styles.stepperBtnSmall}>
-                         <Ionicons name="add" size={14} color="#F97316" />
+                         <Ionicons name="add" size={14} color="#60A5FA" />
                       </TouchableOpacity>
                     </View>
                     <Text style={styles.addedItemTotal}>₹{itemTotal(item).toFixed(2)}</Text>
@@ -415,7 +420,7 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
     setActiveItem((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddItem = useCallback(() => {
+  const handleAddItem = useCallback(async () => {
     const name = activeItem.name.trim();
     const quantity = activeItem.quantity.trim();
     const price = activeItem.price.trim();
@@ -444,6 +449,11 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
     };
 
     setItems((prev) => [...prev, added]);
+
+    // Auto-save to master list if new
+    if (!marketItems.find(i => i.toLowerCase() === name.toLowerCase())) {
+       try { await addItem(name, 'market_purchases'); } catch(e) {}
+    }
 
     // Reset active fields
     setActiveItem({ id: 'active', name: '', quantity: '', price: '' });
@@ -491,7 +501,7 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
       {/* Active Form Card */}
       <View style={styles.itemCard}>
         <View style={styles.itemHeader}>
-          <Ionicons name="basket" size={20} color="#F97316" />
+          <Ionicons name="basket" size={20} color="#60A5FA" />
           <Text style={styles.storePurchasesTitle}>Add Item (Market Purchase)</Text>
         </View>
         
@@ -500,7 +510,7 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
         )}
 
         {/* Item Name Input with Search Icon */}
-        <View style={{ marginBottom: 12, position: 'relative' }}>
+        <View style={{ marginBottom: 12, position: 'relative', zIndex: 50, elevation: 10 }}>
           <Ionicons name="search-outline" size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 12, zIndex: 1 }} />
           <TextInput
             ref={nameInputRef}
@@ -547,8 +557,8 @@ function MarketPurchasesForm({ onSave, saving }: MarketPurchasesFormProps) {
                       } catch (err) {}
                     }}
                   >
-                    <Ionicons name="add-circle-outline" size={18} color="#F97316" />
-                    <Text style={{ fontSize: 14, color: '#F97316', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
+                    <Ionicons name="add-circle-outline" size={18} color="#60A5FA" />
+                    <Text style={{ fontSize: 14, color: '#60A5FA', fontWeight: '600' }}>Add "{activeItem.name.trim()}"</Text>
                   </TouchableOpacity>
                 )}
               </ScrollView>
@@ -863,7 +873,7 @@ export default function ExpensesScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F97316" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#60A5FA" />
           }
         >
           {/* ── Header ── */}
@@ -922,7 +932,7 @@ export default function ExpensesScreen() {
               {/* Section header */}
               <View style={styles.storePurchasesHeader}>
                 <View style={styles.storePurchasesIconBox}>
-                  <Ionicons name="cart" size={20} color="#F97316" />
+                  <Ionicons name="cart" size={20} color="#60A5FA" />
                 </View>
                 <View>
                   <Text style={styles.storePurchasesTitle}>Store Purchases</Text>
@@ -937,7 +947,7 @@ export default function ExpensesScreen() {
               {/* Section header */}
               <View style={[styles.storePurchasesHeader, { borderColor: '#FDBA74', backgroundColor: '#FFF7ED' }]}>
                 <View style={[styles.storePurchasesIconBox, { backgroundColor: '#FFF7ED' }]}>
-                  <Ionicons name="basket" size={20} color="#F97316" />
+                  <Ionicons name="basket" size={20} color="#60A5FA" />
                 </View>
                 <View>
                   <Text style={styles.storePurchasesTitle}>Market Purchases</Text>
@@ -1011,8 +1021,8 @@ export default function ExpensesScreen() {
           <View style={styles.listHeader}>
             <Text style={styles.sectionLabel}>Today's Expenses</Text>
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#F97316' }}>View All </Text>
-              <Ionicons name="chevron-forward" size={14} color="#F97316" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#60A5FA' }}>View All </Text>
+              <Ionicons name="chevron-forward" size={14} color="#60A5FA" />
             </TouchableOpacity>
           </View>
 
@@ -1150,7 +1160,7 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   totalBadgeLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginBottom: 2 },
-  totalAmount: { color: '#F97316', fontSize: 22, fontWeight: '800' },
+  totalAmount: { color: '#60A5FA', fontSize: 22, fontWeight: '800' },
 
   // Category pills
   catScroll: { paddingLeft: 20 },
@@ -1281,7 +1291,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   itemIndexText: { fontSize: 12, fontWeight: '800', color: '#475569' },
-  itemTotal: { flex: 1, fontSize: 15, fontWeight: '800', color: '#F97316', textAlign: 'right' },
+  itemTotal: { flex: 1, fontSize: 15, fontWeight: '800', color: '#60A5FA', textAlign: 'right' },
   itemDeleteBtn: { padding: 2 },
 
   // Fields
@@ -1312,7 +1322,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     backgroundColor: '#FFF7ED',
   },
-  addItemText: { fontSize: 15, fontWeight: '700', color: '#F97316' },
+  addItemText: { fontSize: 15, fontWeight: '700', color: '#60A5FA' },
 
   // Subtotal
   subtotalCard: {
@@ -1361,10 +1371,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 16,
-    backgroundColor: '#F97316',
+    backgroundColor: '#60A5FA',
     borderRadius: 16,
     paddingVertical: 16,
-    shadowColor: '#F97316',
+    shadowColor: '#60A5FA',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -1488,7 +1498,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F97316',
+    backgroundColor: '#60A5FA',
     borderRadius: 8,
     paddingVertical: 12,
     marginTop: 16,
@@ -1558,7 +1568,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F97316',
+    backgroundColor: '#60A5FA',
     borderRadius: 12,
     paddingVertical: 16,
     gap: 8,

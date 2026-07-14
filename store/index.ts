@@ -50,7 +50,7 @@ import {
   fetchDailyTotalsForSync,
 } from '@/services/supabase.service';
 import {
-  gsSyncDailyTotals,
+  gsLogTransaction,
   initGoogleSheetSync,
   startNetworkMonitor,
   stopNetworkMonitor,
@@ -630,8 +630,20 @@ export const useSalesStore = create<SalesStore>((set) => ({
     useDashboardStore.getState().loadStats();
 
     // 2. Sync to Google Sheets via Apps Script (with offline queue)
-    fetchDailyTotalsForSync(user.id, form.date).then(totals => {
-      gsSyncDailyTotals(totals, form.date, 'CREATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: form.date,
+      transactionType: 'Sale',
+      category: form.category,
+      itemName: 'N/A',
+      quantity: 1,
+      price: form.amount,
+      totalAmount: form.amount,
+      paymentMethod: form.payment_method,
+      profit: form.amount, // Simplified
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
   },
 
@@ -640,8 +652,20 @@ export const useSalesStore = create<SalesStore>((set) => ({
     if (!user) return;
     const sale = useSalesStore.getState().sales.find((x) => x.id === id);
     if (sale) {
-      fetchDailyTotalsForSync(user.id, sale.date).then(totals => {
-        gsSyncDailyTotals(totals, sale.date, 'DELETE').catch(() => {});
+      gsLogTransaction({
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        businessDate: sale.date,
+        transactionType: 'Delete Sale',
+        category: sale.category,
+        itemName: 'N/A',
+        quantity: 1,
+        price: -sale.amount,
+        totalAmount: -sale.amount,
+        paymentMethod: sale.payment_method,
+        profit: -sale.amount,
+        userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+        userRole: useAuthStore.getState().activeStaff?.role || 'owner'
       }).catch(console.error);
     }
 
@@ -755,8 +779,20 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     useDashboardStore.getState().loadStats();
 
     // 2. Sync to Google Sheets via Apps Script (with offline queue)
-    fetchDailyTotalsForSync(user.id, form.date).then(totals => {
-      gsSyncDailyTotals(totals, form.date, 'CREATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: form.date,
+      transactionType: 'Expense',
+      category: form.category,
+      itemName: form.description || 'N/A',
+      quantity: 1,
+      price: form.amount,
+      totalAmount: form.amount,
+      paymentMethod: form.payment_status || 'cash',
+      profit: -form.amount,
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
 
     // 3. Update Inventory automatically
@@ -871,8 +907,20 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     }
 
     if (expense) {
-      fetchDailyTotalsForSync(user.id, expense.date).then(totals => {
-        gsSyncDailyTotals(totals, expense.date, 'DELETE').catch(() => {});
+      gsLogTransaction({
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        businessDate: expense.date,
+        transactionType: 'Delete Expense',
+        category: expense.category,
+        itemName: expense.description || 'N/A',
+        quantity: 1,
+        price: -expense.amount,
+        totalAmount: -expense.amount,
+        paymentMethod: expense.payment_status || 'cash',
+        profit: expense.amount,
+        userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+        userRole: useAuthStore.getState().activeStaff?.role || 'owner'
       }).catch(console.error);
     }
 
@@ -913,8 +961,20 @@ export const useExpensesStore = create<ExpensesStore>((set) => ({
     const expense = useExpensesStore.getState().expenses.find((e) => e.id === id);
     if (expense) {
       // Sync to Google Sheets: pass category, date, payment_status: 'Paid', but NO amount (avoid double counting)
-      fetchDailyTotalsForSync(user.id, expense.date).then(totals => {
-        gsSyncDailyTotals(totals, expense.date, 'UPDATE').catch(() => {});
+      gsLogTransaction({
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        businessDate: expense.date,
+        transactionType: 'Expense Paid',
+        category: expense.category,
+        itemName: expense.description || 'N/A',
+        quantity: 1,
+        price: 0,
+        totalAmount: 0,
+        paymentMethod: 'cash',
+        profit: 0,
+        userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+        userRole: useAuthStore.getState().activeStaff?.role || 'owner'
       }).catch(console.error);
 
       // Update payment status in inventory if it is a tracked item
@@ -993,8 +1053,20 @@ export const useKadanStore = create<KadanStore>((set) => ({
     const businessDate = useDateStore.getState().businessDate;
 
     // Sync credit (kadan) to Google Sheets
-    fetchDailyTotalsForSync(user.id, businessDate).then(totals => {
-      gsSyncDailyTotals(totals, businessDate, 'CREATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: businessDate,
+      transactionType: 'Kadan (Credit)',
+      category: 'kadan',
+      itemName: form.customer_name || 'N/A',
+      quantity: 1,
+      price: form.amount,
+      totalAmount: form.amount,
+      paymentMethod: 'credit',
+      profit: 0,
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
   },
 
@@ -1011,8 +1083,20 @@ export const useKadanStore = create<KadanStore>((set) => ({
     const kadan = useKadanStore.getState().kadanList.find((k) => k.id === id);
     if (kadan) {
       const date = kadan.created_at ? kadan.created_at.split('T')[0] : useDateStore.getState().businessDate;
-      fetchDailyTotalsForSync(user.id, date).then(totals => {
-        gsSyncDailyTotals(totals, date, 'DELETE').catch(() => {});
+      gsLogTransaction({
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        businessDate: date,
+        transactionType: 'Delete Kadan',
+        category: 'kadan',
+        itemName: kadan.customer_name || 'N/A',
+        quantity: 1,
+        price: -kadan.amount,
+        totalAmount: -kadan.amount,
+        paymentMethod: 'credit',
+        profit: 0,
+        userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+        userRole: useAuthStore.getState().activeStaff?.role || 'owner'
       }).catch(console.error);
     }
     await deleteKadan(id);
@@ -1075,8 +1159,20 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
     });
 
     // Sync inventory to Google Sheets
-    fetchDailyTotalsForSync(user.id, date).then(totals => {
-      gsSyncDailyTotals(totals, date, 'UPDATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: date,
+      transactionType: 'Inventory Update',
+      category: 'inventory',
+      itemName: item.item_name,
+      quantity: quantity,
+      price: 0,
+      totalAmount: 0,
+      paymentMethod: 'N/A',
+      profit: 0,
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
   },
 }));
@@ -1116,8 +1212,20 @@ export const useCashStore = create<CashStore>((set) => ({
 
     // Sync cash balance to Google Sheets
     const targetDate = date || getTodayDate();
-    fetchDailyTotalsForSync(user.id, targetDate).then(totals => {
-      gsSyncDailyTotals(totals, targetDate, 'UPDATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: targetDate,
+      transactionType: 'Cash Balance Update',
+      category: 'cash',
+      itemName: 'Cash Update',
+      quantity: 1,
+      price: 0,
+      totalAmount: 0,
+      paymentMethod: 'N/A',
+      profit: 0,
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
   },
 }));

@@ -193,6 +193,7 @@ export default function ReportsScreen() {
   const cashExpenses = data.reduce((s, d) => s + safeValue(d.cashExpenses), 0);
   const creditSales = data.reduce((s, d) => s + safeValue(d.creditSales), 0);
   const inventoryPurchases = data.reduce((s, d) => s + safeValue(d.inventoryPurchases), 0);
+  const totalTransactions = data.reduce((s, d) => s + safeValue(d.totalTransactions), 0);
   
   const totalCategoryAmount = useMemo(() => categoryData.reduce((sum, item) => sum + safeValue(item.amount), 0), [categoryData]);
 
@@ -299,8 +300,6 @@ export default function ReportsScreen() {
       >
         {loading && data.length === 0 ? (
           <ListSkeleton count={4} />
-        ) : data.length === 0 ? (
-          <EmptyState emoji="📊" title={t('reports.no_data')} onAction={loadData} actionLabel={t('common.retry')} />
         ) : (
           <>
             {/* Summary Cards */}
@@ -310,8 +309,8 @@ export default function ReportsScreen() {
                   label="Total Sales"
                   value={totalSales}
                   icon="trending-up"
-                  color="#10B981"
-                  bg="#D1FAE5"
+                  color="#F97316"
+                  bg="#FFEDD5"
                 />
                 <SummaryCard
                   label="Total Expenses"
@@ -321,14 +320,23 @@ export default function ReportsScreen() {
                   bg="#FEE2E2"
                 />
               </View>
-              <SummaryCard
-                label="Total Profit"
-                value={totalProfit}
-                icon="wallet"
-                color={totalProfit >= 0 ? '#3B82F6' : '#EF4444'}
-                bg={totalProfit >= 0 ? '#DBEAFE' : '#FEE2E2'}
-                large
-              />
+              <View style={styles.summaryRow}>
+                <SummaryCard
+                  label="Total Profit"
+                  value={totalProfit}
+                  icon="wallet"
+                  color={totalProfit >= 0 ? '#22C55E' : '#EF4444'}
+                  bg={totalProfit >= 0 ? '#DCFCE7' : '#FEE2E2'}
+                />
+                <SummaryCard
+                  label="Transactions"
+                  value={totalTransactions}
+                  icon="swap-horizontal"
+                  color="#8B5CF6"
+                  bg="#EDE9FE"
+                  isCount={true}
+                />
+              </View>
             </View>
 
             {/* Detailed Stats */}
@@ -366,6 +374,7 @@ export default function ReportsScreen() {
                     title=""
                     type="line"
                     color="#F97316"
+                    period={period}
                   />
                 </View>
 
@@ -594,119 +603,7 @@ export default function ReportsScreen() {
               );
             })()}
 
-            {/* ── Inventory Summary Section ── */}
-            {(() => {
-              const riceItem = inventory.find(i => i.item_name.toLowerCase().trim() === 'rice');
-              const chickenItem = inventory.find(i => i.item_name.toLowerCase().trim() === 'chicken');
-              const masalaItem = inventory.find(i => ['masala', 'masalas'].includes(i.item_name.toLowerCase().trim()));
-              const oilItem = inventory.find(i => ['oil', 'cooking oil'].includes(i.item_name.toLowerCase().trim()));
-              
-              const totalPendingAmount = allExpenses
-                .filter(e => e.payment_status === 'Pending')
-                .reduce((sum, e) => sum + e.amount, 0);
 
-              const lowStockItems = inventory.filter(i => {
-                const qty = Number(i.quantity) || 0;
-                const min = Number(i.low_stock_threshold) || 0;
-                return qty > 0 && qty <= min;
-              });
-
-              const outOfStockItems = inventory.filter(i => {
-                const qty = Number(i.quantity) || 0;
-                return qty <= 0;
-              });
-
-              return (
-                <View style={styles.sectionContainer}>
-                  <Text style={styles.sectionTitle}>Inventory Summary</Text>
-                  
-                  {/* Metrics Grid */}
-                  <View style={styles.metricsGrid}>
-                    <View style={styles.metricItemRow}>
-                      <View style={styles.metricHalfCard}>
-                        <Ionicons name="pizza" size={20} color="#3B82F6" />
-                        <Text style={styles.metricCardLabel}>Rice Stock</Text>
-                        <Text style={styles.metricCardValue}>
-                          {riceItem ? `${riceItem.quantity} ${riceItem.unit}` : '0 kg'}
-                        </Text>
-                      </View>
-                      <View style={styles.metricHalfCard}>
-                        <Ionicons name="restaurant" size={20} color="#EF4444" />
-                        <Text style={styles.metricCardLabel}>Chicken Stock</Text>
-                        <Text style={styles.metricCardValue}>
-                          {chickenItem ? `${chickenItem.quantity} ${chickenItem.unit}` : '0 kg'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.metricItemRow}>
-                      <View style={styles.metricHalfCard}>
-                        <Ionicons name="flame" size={20} color="#F59E0B" />
-                        <Text style={styles.metricCardLabel}>Masala Stock</Text>
-                        <Text style={styles.metricCardValue}>
-                          {masalaItem ? `${masalaItem.quantity} ${masalaItem.unit}` : '0 kg'}
-                        </Text>
-                      </View>
-                      <View style={styles.metricHalfCard}>
-                        <Ionicons name="water" size={20} color="#10B981" />
-                        <Text style={styles.metricCardLabel}>Oil Stock</Text>
-                        <Text style={styles.metricCardValue}>
-                          {oilItem ? `${oilItem.quantity} ${oilItem.unit}` : '0 ltr'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Total Pending Purchase Amount Card */}
-                    <View style={[styles.pendingTotalCard, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5', marginTop: 0 }, SHADOW.sm]}>
-                      <View style={styles.pendingTotalLeft}>
-                        <View style={[styles.pendingIconBox, { backgroundColor: '#FCA5A5' }]}>
-                          <Ionicons name="alert-circle" size={24} color="#EF4444" />
-                        </View>
-                        <View>
-                          <Text style={[styles.pendingTotalLabel, { color: '#991B1B' }]}>Total Pending Purchase Amount</Text>
-                          <Text style={[styles.pendingTotalValue, { color: '#7F1D1D' }]}>{formatCurrency(totalPendingAmount)}</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Low / Out of stock lists */}
-                  <View style={[styles.reportTableCard, SHADOW.sm]}>
-                    <Text style={styles.listSubtitle}>Alerts & Statuses</Text>
-                    
-                    {/* Out of Stock Items */}
-                    <View style={{ marginBottom: 14 }}>
-                      <Text style={[styles.alertSubHeader, { color: '#EF4444' }]}>🔴 Out of Stock ({outOfStockItems.length})</Text>
-                      {outOfStockItems.length === 0 ? (
-                        <Text style={styles.noAlertsText}>No out of stock items</Text>
-                      ) : (
-                        outOfStockItems.map(item => (
-                          <View key={item.id} style={styles.alertRow}>
-                            <Text style={styles.alertItemName}>{t(`inventory.items.${item.item_name}`) || item.item_name}</Text>
-                            <Text style={[styles.alertItemQty, { color: '#EF4444' }]}>{item.quantity} {item.unit}</Text>
-                          </View>
-                        ))
-                      )}
-                    </View>
-
-                    {/* Low Stock Items */}
-                    <View>
-                      <Text style={[styles.alertSubHeader, { color: '#F59E0B' }]}>🟡 Low Stock ({lowStockItems.length})</Text>
-                      {lowStockItems.length === 0 ? (
-                        <Text style={styles.noAlertsText}>No low stock items</Text>
-                      ) : (
-                        lowStockItems.map(item => (
-                          <View key={item.id} style={styles.alertRow}>
-                            <Text style={styles.alertItemName}>{t(`inventory.items.${item.item_name}`) || item.item_name}</Text>
-                            <Text style={[styles.alertItemQty, { color: '#D97706' }]}>{item.quantity} {item.unit}</Text>
-                          </View>
-                        ))
-                      )}
-                    </View>
-                  </View>
-                </View>
-              );
-            })()}
 
             {/* Export Section */}
             <TouchableOpacity
@@ -726,10 +623,10 @@ export default function ReportsScreen() {
 }
 
 function SummaryCard({
-  label, value, icon, color, bg, large,
+  label, value, icon, color, bg, large, isCount,
 }: {
   label: string; value: number; icon: any;
-  color: string; bg: string; large?: boolean;
+  color: string; bg: string; large?: boolean; isCount?: boolean;
 }) {
   return (
     <View style={[styles.summaryCard, large && styles.summaryCardLarge]}>
@@ -740,7 +637,7 @@ function SummaryCard({
         <Text style={styles.summaryLabel}>{label}</Text>
       </View>
       <Text style={[styles.summaryValue, large && styles.summaryValueLarge]}>
-        {formatCurrency(value)}
+        {isCount ? value : formatCurrency(value)}
       </Text>
     </View>
   );

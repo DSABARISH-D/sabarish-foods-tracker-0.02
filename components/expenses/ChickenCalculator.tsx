@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { useTranslation } from '@/hooks/useTranslation';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 interface ChickenCalculatorProps {
   onTotalChange: (total: number, kg: number, pricePerKg: number) => void;
@@ -38,7 +39,7 @@ export function ChickenCalculator({ onTotalChange }: ChickenCalculatorProps) {
           </Text>
           <View style={styles.inputWrap}>
             <Text style={styles.prefix}>₹</Text>
-            <TextInput
+            <AppTextInput
               style={styles.input}
               value={pricePerKg}
               onChangeText={(v) => {
@@ -61,7 +62,7 @@ export function ChickenCalculator({ onTotalChange }: ChickenCalculatorProps) {
             {t('expenses.quantity_kg')}
           </Text>
           <View style={styles.inputWrap}>
-            <TextInput
+            <AppTextInput
               style={styles.input}
               value={quantityKg}
               onChangeText={(v) => {

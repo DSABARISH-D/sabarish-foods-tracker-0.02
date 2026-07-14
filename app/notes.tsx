@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import { useNotesStore, useAuthStore } from '@/store';
 import { Note, NoteCategory } from '@/types';
 import { SHADOW } from '@/constants/theme';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 const CATEGORIES: NoteCategory[] = ['Business', 'Supplier', 'Customer', 'Staff', 'Reminder', 'Other'];
 
@@ -76,17 +77,19 @@ export default function NotesScreen() {
   };
 
   const handleSave = async () => {
-    if (!title.trim() || !description.trim()) {
-      Alert.alert('Validation', 'Title and Description are required.');
+    if (!description.trim()) {
+      Alert.alert('Validation', 'Description is required.');
       return;
     }
+
+    const finalTitle = title.trim() || 'Untitled Note';
 
     setSaving(true);
     try {
       if (activeNoteId) {
-        await editNote(activeNoteId, title.trim(), description.trim(), category);
+        await editNote(activeNoteId, finalTitle, description.trim(), category);
       } else {
-        await addNote(title.trim(), description.trim(), category);
+        await addNote(finalTitle, description.trim(), category);
       }
       closeEditor();
     } catch (e) {
@@ -151,7 +154,7 @@ export default function NotesScreen() {
 
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#94A3B8" />
-        <TextInput
+        <AppTextInput
           style={styles.searchInput}
           placeholder="Search notes..."
           value={searchQuery}
@@ -226,7 +229,7 @@ export default function NotesScreen() {
           </View>
 
           <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-            <TextInput
+            <AppTextInput
               style={styles.titleInput}
               placeholder="Note Title"
               value={title}
@@ -252,7 +255,7 @@ export default function NotesScreen() {
               </ScrollView>
             </View>
 
-            <TextInput
+            <AppTextInput
               style={styles.descInput}
               placeholder="Start typing your note here..."
               value={description}

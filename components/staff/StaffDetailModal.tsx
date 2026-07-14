@@ -5,6 +5,7 @@ import { SHADOW } from '@/constants/theme';
 import { Staff, SalaryPayment, StaffPermissions } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { useStaffStore } from '@/store/staffStore';
+import { AppTextInput } from '@/components/ui/AppTextInput';
 
 interface Props {
   visible: boolean;
@@ -126,7 +127,7 @@ export function StaffDetailModal({ visible, staff, onClose, onEdit, onDelete }: 
               </View>
               <View style={s.salaryMonthRow}>
                 <Text style={s.salaryLabel}>Month:</Text>
-                <TextInput style={s.monthInput} value={salaryMonth} onChangeText={setSalaryMonth} placeholder="YYYY-MM" placeholderTextColor="#94A3B8" />
+                <AppTextInput style={s.monthInput} value={salaryMonth} onChangeText={setSalaryMonth} placeholder="YYYY-MM" placeholderTextColor="#94A3B8" />
               </View>
               <TouchableOpacity style={s.payBtn} onPress={handlePaySalary}>
                 <Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={s.payBtnText}>Mark Salary Paid</Text>
@@ -166,7 +167,7 @@ export function StaffDetailModal({ visible, staff, onClose, onEdit, onDelete }: 
           <View style={s.overlay}>
             <View style={[s.mpinCard, SHADOW.lg]}>
               <Text style={s.mpinTitle}>Reset MPIN</Text>
-              <TextInput style={s.mpinInput} value={newMpin} onChangeText={setNewMpin} placeholder="New 4-digit MPIN" keyboardType="number-pad" secureTextEntry maxLength={4} placeholderTextColor="#94A3B8" />
+              <AppTextInput style={s.mpinInput} value={newMpin} onChangeText={setNewMpin} placeholder="New 4-digit MPIN" keyboardType="number-pad" secureTextEntry maxLength={4} placeholderTextColor="#94A3B8" />
               <View style={s.mpinBtns}>
                 <TouchableOpacity style={s.mpinCancel} onPress={() => { setMpinModal(false); setNewMpin(''); }}><Text style={s.mpinCancelText}>Cancel</Text></TouchableOpacity>
                 <TouchableOpacity style={s.mpinSave} onPress={handleResetMpin}><Text style={s.mpinSaveText}>Reset</Text></TouchableOpacity>

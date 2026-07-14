@@ -12,6 +12,8 @@ import { COLORS, FONTS, RADIUS, SHADOW, SPACING } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AppTextInput } from '@/components/ui/AppTextInput';
+
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
@@ -63,7 +65,7 @@ export function Input({
         {prefix && (
           <Text style={[styles.prefix, { color: colors.textSecondary }]}>{prefix}</Text>
         )}
-        <TextInput
+        <AppTextInput
           style={[
             styles.input,
             { color: colors.text },

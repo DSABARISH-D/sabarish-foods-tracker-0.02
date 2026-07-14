@@ -25,7 +25,7 @@ import {
   markAttendance,
 } from '@/services/staff.service';
 import { useAuthStore, useDashboardStore, useExpensesStore, useDateStore } from '@/store';
-import { gsSyncDailyTotals } from '@/services/googleSheet.service';
+import { gsLogTransaction } from '@/services/googleSheet.service';
 import { fetchDailyTotalsForSync } from '@/services/supabase.service';
 import { getTodayDate } from '@/lib/utils';
 
@@ -147,8 +147,20 @@ export const useStaffStore = create<StaffStore>((set, get) => ({
 
     // Sync staff salary to Google Sheets
     const businessDate = useDateStore.getState().businessDate;
-    fetchDailyTotalsForSync(user.id, businessDate).then(totals => {
-      gsSyncDailyTotals(totals, businessDate, 'CREATE').catch(() => {});
+    gsLogTransaction({
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      businessDate: businessDate,
+      transactionType: 'Staff Salary',
+      category: 'salary',
+      itemName: `${staffName} (${salaryMonth})`,
+      quantity: 1,
+      price: amount,
+      totalAmount: amount,
+      paymentMethod: 'cash',
+      profit: -amount,
+      userName: useAuthStore.getState().activeStaff?.full_name || user.email,
+      userRole: useAuthStore.getState().activeStaff?.role || 'owner'
     }).catch(console.error);
   },
 

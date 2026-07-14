@@ -27,7 +27,7 @@ const RETRY_DELAY_MS = 2000; // Base delay (doubles each retry)
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
 // ── Types ─────────────────────────────────────────────────────
-export type SyncAction = 'CREATE' | 'UPDATE' | 'DELETE';
+export type SyncAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOG_TRANSACTION';
 
 export interface SyncPayload {
   action: SyncAction;
@@ -138,18 +138,15 @@ export async function initGoogleSheetSync(): Promise<void> {
 // ============================================================
 
 /**
- * Sync daily totals to Google Sheets.
- * Overwrites the exact absolute values for a given date.
+ * Sync an individual transaction to Google Sheets.
  */
-export async function gsSyncDailyTotals(
-  totals: Record<string, any>,
-  date: string,
-  action: 'CREATE' | 'UPDATE' | 'DELETE'
+export async function gsLogTransaction(
+  data: Record<string, any>
 ): Promise<SyncResponse> {
   return enqueueAndSync({
-    action, // 'CREATE', 'UPDATE', or 'DELETE' - Code.gs handles these generically now
-    data: totals,
-    date,
+    action: 'LOG_TRANSACTION',
+    data,
+    date: data.date || new Date().toISOString().split('T')[0],
   });
 }
 
